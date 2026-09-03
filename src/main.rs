@@ -4,6 +4,7 @@ mod protocol;
 mod render;
 mod watcher;
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -24,6 +25,9 @@ Usage:
   mark <file>       Open a Markdown file in a window
   mark --help       Show this message
   mark --version    Show the version
+
+Options:
+  -f, --foreground  Keep hold of the terminal instead of detaching from it
 
 Shortcuts (inside the window):
   Ctrl +/-/0        Zoom in, out, reset
@@ -60,9 +64,13 @@ fn main() {
 }
 
 fn run() -> Result<()> {
-    let Some(path) = parse_args()? else {
+    let Some(Invocation { path, foreground }) = parse_args()? else {
         return Ok(());
     };
+
+    if !foreground {
+        detach();
+    }
 
     let doc_dir: render::DocDir = Arc::new(Mutex::new(parent_of(&path)));
     let renderer = Renderer::new(doc_dir.clone());
@@ -114,41 +122,97 @@ fn run() -> Result<()> {
     });
 }
 
-/// Returns the file to open, or `None` when the run was only a question.
-fn parse_args() -> Result<Option<PathBuf>> {
-    let mut args = std::env::args_os().skip(1);
-    let Some(first) = args.next() else {
+/// What the command line asked for, or `None` when the run was only a question.
+struct Invocation {
+    path: PathBuf,
+    foreground: bool,
+}
+
+fn parse_args() -> Result<Option<Invocation>> {
+    let mut file: Option<OsString> = None;
+    let mut foreground = false;
+
+    for argument in std::env::args_os().skip(1) {
+        match argument.to_str() {
+            Some("-h" | "--help") => {
+                print!("{USAGE}");
+                return Ok(None);
+            }
+            Some("-V" | "--version") => {
+                println!("mark {}", env!("CARGO_PKG_VERSION"));
+                return Ok(None);
+            }
+            Some("-f" | "--foreground") => foreground = true,
+            Some(flag) if flag.starts_with('-') && flag != "-" => {
+                bail!("unknown option '{flag}' (try --help)");
+            }
+            _ if file.is_some() => bail!("expected exactly one file (try --help)"),
+            _ => file = Some(argument),
+        }
+    }
+
+    let Some(file) = file else {
         // Being called with no file is a mistake, not a request for help, so the
         // usage goes to stderr and the exit code says so.
         eprint!("{USAGE}");
         std::process::exit(2);
     };
 
-    match first.to_str() {
-        Some("-h" | "--help") => {
-            print!("{USAGE}");
-            return Ok(None);
-        }
-        Some("-V" | "--version") => {
-            println!("mark {}", env!("CARGO_PKG_VERSION"));
-            return Ok(None);
-        }
-        Some(flag) if flag.starts_with('-') && flag != "-" => {
-            bail!("unknown option '{flag}' (try --help)");
-        }
-        _ => {}
-    }
-
-    if args.next().is_some() {
-        bail!("expected exactly one file (try --help)");
-    }
-
-    let path = absolute(Path::new(&first));
+    let path = absolute(Path::new(&file));
     if !path.is_file() {
         bail!("'{}' is not a file", path.display());
     }
-    Ok(Some(path))
+    Ok(Some(Invocation { path, foreground }))
 }
+
+/// Hand the terminal back to the shell and keep running.
+///
+/// This happens after the arguments are checked, so a bad path is still reported
+/// where the person typing can see it, and before anything starts a thread or
+/// touches GTK -- forking past either of those leaves the child holding locks
+/// that nobody will ever release.
+///
+/// stderr stays attached when it is a terminal, so a window that fails to open
+/// after the prompt came back still says why. When it is anything else it is
+/// closed: a detached process holding a pipe open blocks whoever is reading it,
+/// which would hang `mark file | cat` and every command substitution. Use
+/// `--foreground` to keep the whole thing wired up.
+#[cfg(unix)]
+fn detach() {
+    // SAFETY: single-threaded at this point, and the child does nothing between
+    // the fork and exec-less continuation that is not async-signal-safe.
+    unsafe {
+        match libc::fork() {
+            // Out of processes, or not permitted. Staying in the foreground is a
+            // better outcome than refusing to open the file.
+            -1 => return,
+            0 => {}
+            // The parent's only remaining job is to release the shell. _exit
+            // skips the atexit handlers and buffer flushes the child now owns.
+            _ => libc::_exit(0),
+        }
+
+        // Leave the terminal's session so closing it does not take us with it.
+        libc::setsid();
+
+        let devnull = libc::open(c"/dev/null".as_ptr(), libc::O_RDWR);
+        if devnull >= 0 {
+            libc::dup2(devnull, libc::STDIN_FILENO);
+            libc::dup2(devnull, libc::STDOUT_FILENO);
+            if libc::isatty(libc::STDERR_FILENO) != 1 {
+                libc::dup2(devnull, libc::STDERR_FILENO);
+            }
+            if devnull > libc::STDERR_FILENO {
+                libc::close(devnull);
+            }
+        }
+    }
+}
+
+/// On Windows a console application cannot hand its console back, and the GUI
+/// subsystem is the proper fix rather than a fork. See FUTURE.md.
+#[cfg(not(unix))]
+fn detach() {}
 
 /// Where the reader should end up after the page is replaced.
 #[derive(Clone, Copy)]

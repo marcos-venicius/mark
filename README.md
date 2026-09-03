@@ -51,7 +51,17 @@ cp target/release/mark ~/.local/bin/
 mark <file>       Open a Markdown file in a window
 mark --help       Show usage
 mark --version    Show the version
+
+-f, --foreground  Keep hold of the terminal instead of detaching from it
 ```
+
+On Unix `mark` hands the terminal straight back — the prompt returns in about
+30 ms and the window keeps running on its own, so closing the terminal does not
+take it with it. Bad arguments are still reported before that happens, with a
+non-zero exit code. `--foreground` turns it off, which is what you want when
+running `mark` under a supervisor or capturing its output.
+
+On Windows the process still holds the console; see [FUTURE.md](FUTURE.md).
 
 ## What it renders
 
@@ -110,6 +120,10 @@ Relative URLs are made absolute while the Markdown is rendered, before the marku
 ever reaches the webview. That is not cosmetic: a webview resolves a relative URL
 against the page address and flattens a leading `../` in the process, so an image
 one directory up would otherwise never be found.
+
+The fork that detaches from the terminal happens before anything starts a thread
+or touches GTK. Forking past either leaves the child holding locks that nothing
+will ever release, so the order is not incidental.
 
 On Unix the webview is attached through the window's GTK container rather than
 through a raw window handle. wry's generic path only accepts an X11 handle, so a

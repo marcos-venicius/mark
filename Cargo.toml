@@ -22,6 +22,9 @@ tao = "0.37"
 two-face = "0.5"
 wry = "0.56"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dependencies.comrak]
 version = "0.54"
 default-features = false
