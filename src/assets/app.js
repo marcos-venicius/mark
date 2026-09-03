@@ -269,6 +269,9 @@
         case "f":
           event.preventDefault();
           return openFind();
+        case "p":
+          event.preventDefault();
+          return send({ type: "print" });
         case "r":
           event.preventDefault();
           return send({ type: "reload" });

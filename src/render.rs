@@ -103,6 +103,14 @@ impl Renderer {
     /// Each palette is emitted twice, once per way of arriving at it, because
     /// the two cannot be written as a single selector -- one is a media query.
     /// The explicit choices come last so they win the tie on specificity.
+    ///
+    /// Printing is the third way, and it only ever wants the light one: a
+    /// printer drops the near-black background the dark theme was picked
+    /// against, and its tokens are then pale colours on white paper. So the
+    /// light theme is emitted a third time under `@media print`, against the two
+    /// selectors that would otherwise have delivered dark. Same specificity as
+    /// those, later in the file, so it wins on order -- which is what the
+    /// `@media print` block in style.css does for the rest of the page.
     pub fn syntax_css() -> String {
         let themes = two_face::theme::extra();
         let light = theme_css(&themes, LIGHT_THEME);
@@ -111,11 +119,14 @@ impl Renderer {
         format!(
             "@media (prefers-color-scheme: light) {{\n{}}}\n\
              @media (prefers-color-scheme: dark) {{\n{}}}\n\
-             {}\n{}",
+             {}\n{}\n\
+             @media print {{\n{}{}}}",
             scope(&light, LIGHT_BY_DEFAULT),
             scope(&dark, DARK_BY_DEFAULT),
             scope(&light, LIGHT_CHOSEN),
             scope(&dark, DARK_CHOSEN),
+            scope(&light, DARK_BY_DEFAULT),
+            scope(&light, DARK_CHOSEN),
         )
     }
 
@@ -362,6 +373,32 @@ mod tests {
         ] {
             assert!(css.contains(scope), "missing {scope}");
         }
+    }
+
+    /// Print has to end up with the light theme however the reader got there,
+    /// and it only does so by coming last: the selectors it overrides have the
+    /// same specificity, so order is the whole mechanism.
+    #[test]
+    fn print_overrides_the_dark_palette_and_comes_last() {
+        let css = Renderer::syntax_css();
+        let print = css.find("@media print").expect("no print block");
+
+        // The rules it has to beat are the ones written before it.
+        assert!(css.find(DARK_CHOSEN).expect("no dark rules") < print);
+        for scope in [DARK_BY_DEFAULT, DARK_CHOSEN] {
+            assert!(css[print..].contains(scope), "print misses {scope}");
+        }
+
+        // The colours under it have to be the light theme's. Anything the dark
+        // theme alone emits would mean the wrong palette was scoped.
+        let light = scope(
+            &theme_css(&two_face::theme::extra(), LIGHT_THEME),
+            DARK_CHOSEN,
+        );
+        assert!(
+            css[print..].contains(light.trim_end()),
+            "print is not the light theme"
+        );
     }
 
     /// An unscoped rule would show through in the other palette wherever that

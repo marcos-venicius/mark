@@ -464,3 +464,116 @@ tbody tr:nth-child(even) { background: var(--surface); }
 
 .error { color: var(--caution); }
 .error code { color: var(--text); }
+
+/* ------------------------------------------------------------------ print */
+
+/* What the reader looks at is a scrolling application; what the printer gets
+   has to be a document. Three things stand in the way.
+
+   The scroll container is the one that silently ruins the output: #page owns the
+   overflow, so a printer given the page as it stands emits the first screenful
+   and stops. Height and overflow go back to the defaults here and the content
+   flows across pages again.
+
+   The furniture -- sidebar, find bar, the # anchors beside headings -- is
+   navigation. None of it can be operated on paper.
+
+   The dark palette has to be undone rather than merely allowed to print, since
+   printers drop backgrounds by default: left alone it arrives as the pale grey
+   text meant for a near-black page, on white. The variables are set again with
+   the same selectors that set them in the first place, placed later in the file
+   so the tie in specificity is broken by order. render.rs does the same for the
+   syntax colours. */
+@media print {
+  :root,
+  :root[data-theme="dark"],
+  :root:not([data-theme="light"]) {
+    --bg: #ffffff;
+    --sidebar-bg: #ffffff;
+    --surface: #f6f7f9;
+    --surface-strong: #eef0f3;
+    --border: #d3d8de;
+    --border-strong: #b8bfc8;
+    --text: #000000;
+    --text-soft: #23282e;
+    --muted: #4a515a;
+    --link: #0b4fc4;
+    --accent: #0b4fc4;
+    --shadow: none;
+    --selection: transparent;
+
+    --note: #0b4fc4;
+    --tip: #0f6b2b;
+    --important: #6b3bbf;
+    --warning: #7a5200;
+    --caution: #b3121f;
+
+    color-scheme: light;
+  }
+
+  @page { margin: 18mm 16mm; }
+
+  html, body { height: auto; }
+
+  body {
+    display: block;
+    font-size: 11pt;
+    line-height: 1.55;
+  }
+
+  #toc,
+  #find,
+  a.anchor { display: none !important; }
+
+  #page { overflow: visible; }
+
+  #content {
+    max-width: none;
+    padding: 0;
+  }
+
+  /* Tinted blocks are not decoration: syntax colouring on a background the
+     printer decided to drop is pale tokens on white. */
+  pre,
+  th,
+  tbody tr:nth-child(even),
+  .markdown-alert,
+  kbd {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* A heading stranded at the foot of a page reads as a mistake, and so does a
+     code block or a table torn down the middle. */
+  h1, h2, h3, h4, h5, h6 {
+    break-after: avoid;
+    break-inside: avoid;
+  }
+
+  pre,
+  blockquote,
+  table,
+  img,
+  .markdown-alert { break-inside: avoid; }
+
+  p { orphans: 2; widows: 2; }
+
+  /* Neither of these can scroll on paper, so they have to fit. */
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .table-wrap { overflow-x: visible; }
+
+  /* A link nobody can click is worth the address behind it -- but only when that
+     address leads somewhere the reader can go. Relative links point at files
+     next to a document the printout has already left behind, and anchors point
+     into the page itself; both would print as noise. */
+  a[href^="http"]::after {
+    content: " <" attr(href) ">";
+    color: var(--muted);
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+}

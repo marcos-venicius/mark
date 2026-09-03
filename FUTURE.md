@@ -36,7 +36,10 @@ out rather than shipped unverified.
 
 ## Smaller ideas
 
-- Export the rendered document to HTML or PDF.
+- Export the rendered document to HTML. PDF is covered by Ctrl P, which
+  hands the page to the print dialog; what is missing is a headless
+  `mark --pdf out.pdf` for scripts, which needs the platform print APIs
+  directly rather than a dialog.
 - A `.desktop` entry so `mark` shows up under "Open with" for `.md` files.
 - Remember window size and the sidebar state between runs.
 - Jump to the fragment when following a link like `other.md#section`; today the

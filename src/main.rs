@@ -36,6 +36,7 @@ Shortcuts (inside the window):
   d                 Switch between light and dark
   Shift D           Go back to following the system
   Alt Left/Right    Go back and forward between documents
+  Ctrl P            Print, or save as PDF
   Ctrl R            Reload from disk
   Ctrl Q            Quit
 ";
@@ -55,6 +56,9 @@ enum UserEvent {
     Back,
     Forward,
     Reload,
+    /// The reader asked for a paper copy, or for the PDF the print dialog can
+    /// write instead.
+    Print,
     Quit,
 }
 
@@ -114,6 +118,7 @@ fn run() -> Result<()> {
             Event::UserEvent(UserEvent::Ready) => app.show(Placement::Top),
             Event::UserEvent(UserEvent::Changed) => app.show(Placement::Keep),
             Event::UserEvent(UserEvent::Reload) => app.show(Placement::Keep),
+            Event::UserEvent(UserEvent::Print) => app.print(),
 
             Event::UserEvent(UserEvent::Open(href)) => app.open(&href, &proxy),
             Event::UserEvent(UserEvent::Back) => app.step(-1, &proxy),
@@ -256,6 +261,21 @@ impl App {
         let _ = self.webview.evaluate_script(&script);
     }
 
+    /// Hand the rendered page to the platform's print dialog.
+    ///
+    /// There is no PDF writer here and there does not need to be: both dialogs
+    /// already have one. GTK offers "Print to File", which writes PDF, and the
+    /// WebView2 preview offers "Save as PDF". What the document looks like on
+    /// the way out is the `@media print` block in the stylesheet.
+    ///
+    /// The error is dropped because there is nothing useful to do with it. The
+    /// window has already been drawn, so a failure here means the desktop has no
+    /// print system to offer, and saying so on a stderr that was closed at
+    /// startup would not reach anyone.
+    fn print(&self) {
+        let _ = self.webview.print();
+    }
+
     /// Follow a link. Markdown opens here; everything else goes to the desktop.
     fn open(&mut self, href: &str, proxy: &EventLoopProxy<UserEvent>) {
         let Some(path) = protocol::path_from_url(href) else {
@@ -374,6 +394,7 @@ fn decode_message(body: &str) -> Option<UserEvent> {
     match message.get("type")?.as_str()? {
         "ready" => Some(UserEvent::Ready),
         "reload" => Some(UserEvent::Reload),
+        "print" => Some(UserEvent::Print),
         "quit" => Some(UserEvent::Quit),
         "back" => Some(UserEvent::Back),
         "forward" => Some(UserEvent::Forward),

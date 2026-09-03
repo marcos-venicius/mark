@@ -105,6 +105,7 @@ On Windows the process still holds the console; see [FUTURE.md](FUTURE.md).
 | <kbd>Shift</kbd> <kbd>D</kbd> | Go back to following the system |
 | <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd> | Back, forward |
 | <kbd>Home</kbd> / <kbd>End</kbd> | Top, bottom |
+| <kbd>Ctrl</kbd> <kbd>P</kbd> | Print, or save as PDF |
 | <kbd>Ctrl</kbd> <kbd>R</kbd> | Reload from disk |
 | <kbd>Ctrl</kbd> <kbd>Q</kbd> or <kbd>Esc</kbd> | Quit |
 
