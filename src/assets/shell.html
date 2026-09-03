@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Documents may contain raw HTML, so the page is locked down to what a reader
+     legitimately needs: local assets over our own protocol, and remote images.
+     No outbound requests of any other kind. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src mark: http://mark.localhost;
+  style-src mark: http://mark.localhost 'unsafe-inline';
+  font-src mark: http://mark.localhost data:;
+  img-src mark: http://mark.localhost data: https:;
+  media-src mark: http://mark.localhost data:;
+  connect-src 'none';
+  form-action 'none';
+  base-uri 'none';
+">
+<title>mark</title>
+<link rel="stylesheet" href="{{STYLE_URL}}">
+<style>/*{{SYNTAX_CSS}}*/</style>
+</head>
+<body>
+  <aside id="toc" hidden>
+    <p class="toc-heading">Contents</p>
+    <nav id="toc-list"></nav>
+  </aside>
+
+  <div id="page">
+    <main id="content"></main>
+  </div>
+
+  <div id="find" hidden>
+    <input id="find-input" type="search" placeholder="Find in page" spellcheck="false" autocomplete="off">
+    <button id="find-prev" type="button" title="Previous (Shift+Enter)" aria-label="Previous match">&#8593;</button>
+    <button id="find-next" type="button" title="Next (Enter)" aria-label="Next match">&#8595;</button>
+    <button id="find-close" type="button" title="Close (Esc)" aria-label="Close">&#10005;</button>
+  </div>
+
+  <script src="{{APP_URL}}"></script>
+</body>
+</html>

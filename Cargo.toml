@@ -1,0 +1,36 @@
+[package]
+name = "mark"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "A single-purpose Markdown viewer: mark <file> opens a window and renders it."
+license = "MIT"
+
+[[bin]]
+name = "mark"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+mime_guess = "2"
+notify = "8"
+open = "5"
+percent-encoding = "2"
+serde_json = "1"
+syntect = "5.3"
+tao = "0.37"
+two-face = "0.5"
+wry = "0.56"
+
+[dependencies.comrak]
+version = "0.54"
+default-features = false
+features = ["syntect-onig"]
+
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+opt-level = "z"
