@@ -86,6 +86,10 @@ On Windows the process still holds the console; see [FUTURE.md](FUTURE.md).
 - **Bundled typography** — Inter for text, JetBrains Mono for code, compiled into
   the binary so a document reads the same on a machine that has neither. See
   [src/assets/fonts/README.md](src/assets/fonts/README.md).
+- **Light and dark**, following the system by default and switching with it while
+  the window is open. Pressing <kbd>D</kbd> picks one outright and is remembered
+  between runs; <kbd>Shift</kbd> <kbd>D</kbd> goes back to following the system.
+  Both the interface and the syntax highlighting change.
 
 ## Keyboard shortcuts
 
@@ -97,6 +101,8 @@ On Windows the process still holds the console; see [FUTURE.md](FUTURE.md).
 | <kbd>/</kbd> or <kbd>Ctrl</kbd> <kbd>F</kbd> | Find in page |
 | <kbd>Enter</kbd> / <kbd>Shift</kbd> <kbd>Enter</kbd> | Next, previous match |
 | <kbd>T</kbd> | Show or hide the table of contents |
+| <kbd>D</kbd> | Switch between light and dark |
+| <kbd>Shift</kbd> <kbd>D</kbd> | Go back to following the system |
 | <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd> | Back, forward |
 | <kbd>Home</kbd> / <kbd>End</kbd> | Top, bottom |
 | <kbd>Ctrl</kbd> <kbd>R</kbd> | Reload from disk |
@@ -120,6 +126,12 @@ Relative URLs are made absolute while the Markdown is rendered, before the marku
 ever reaches the webview. That is not cosmetic: a webview resolves a relative URL
 against the page address and flattens a leading `../` in the process, so an image
 one directory up would otherwise never be found.
+
+Both palettes are written out in full, and both are scoped. Leaving the light one
+unscoped would be the obvious shortcut, but a syntax theme only emits rules for
+the scopes it actually colours — so wherever the dark theme has nothing to say,
+the light colour would show through. That surfaces as a single stray token in one
+language, which is exactly the sort of thing nobody notices for months.
 
 The fork that detaches from the terminal happens before anything starts a thread
 or touches GTK. Forking past either leaves the child holding locks that nothing
@@ -174,7 +186,7 @@ bundled.
 
 ## Not supported yet
 
-Dark theme, Mermaid diagrams and LaTeX formulas are not in this version. See
+Mermaid diagrams and LaTeX formulas are not in this version. See
 [FUTURE.md](FUTURE.md) for what each would involve.
 
 ## Development

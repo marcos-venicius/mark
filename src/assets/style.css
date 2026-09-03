@@ -52,6 +52,7 @@
   --link: #1f6feb;
   --accent: #1f6feb;
   --shadow: 0 6px 24px rgba(20, 24, 31, 0.12);
+  --selection: rgba(31, 111, 235, 0.18);
 
   --note: #1f6feb;
   --tip: #1a7f37;
@@ -64,7 +65,64 @@
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono",
     "Liberation Mono", Menlo, Consolas, monospace;
 
+  color-scheme: light;
   font-size: 16.5px;
+}
+
+/* The dark palette, written twice on purpose.
+   The two conditions it answers to -- the system asking for dark with nothing
+   overriding it, and the reader picking dark outright -- cannot be folded into
+   one selector, because one of them is a media query. Keep the blocks identical;
+   render.rs scopes the syntax colours to these same two selectors. Nothing below
+   this point knows which palette is in play. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1116;
+    --sidebar-bg: #0b0d11;
+    --surface: #171a21;
+    --surface-strong: #1f232b;
+    --border: #262b34;
+    --border-strong: #363c47;
+    --text: #e2e5ea;
+    --text-soft: #b6bdc7;
+    --muted: #8b939f;
+    --link: #6aa9ff;
+    --accent: #6aa9ff;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+    --selection: rgba(106, 169, 255, 0.26);
+
+    --note: #6aa9ff;
+    --tip: #4ac26b;
+    --important: #b787f0;
+    --warning: #d4a72c;
+    --caution: #ff7b72;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1116;
+  --sidebar-bg: #0b0d11;
+  --surface: #171a21;
+  --surface-strong: #1f232b;
+  --border: #262b34;
+  --border-strong: #363c47;
+  --text: #e2e5ea;
+  --text-soft: #b6bdc7;
+  --muted: #8b939f;
+  --link: #6aa9ff;
+  --accent: #6aa9ff;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  --selection: rgba(106, 169, 255, 0.26);
+
+  --note: #6aa9ff;
+  --tip: #4ac26b;
+  --important: #b787f0;
+  --warning: #d4a72c;
+  --caution: #ff7b72;
+
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -85,7 +143,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-::selection { background: rgba(31, 111, 235, 0.18); }
+::selection { background: var(--selection); }
 
 ::-webkit-scrollbar { width: 11px; height: 11px; }
 ::-webkit-scrollbar-thumb {

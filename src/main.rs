@@ -33,6 +33,8 @@ Shortcuts (inside the window):
   Ctrl +/-/0        Zoom in, out, reset
   /                 Find in page
   t                 Toggle the table of contents
+  d                 Switch between light and dark
+  Shift D           Go back to following the system
   Alt Left/Right    Go back and forward between documents
   Ctrl R            Reload from disk
   Ctrl Q            Quit

@@ -3,21 +3,6 @@
 Things deliberately left out of the first version, with notes on what it would
 take to add them.
 
-## Light and dark theme
-
-Follow the system preference by default and let a key toggle it.
-
-Most of the groundwork is already in place: every colour in `src/assets/style.css`
-is a custom property on `:root`, and the syntax highlighting uses CSS classes
-rather than inline colours. Adding a theme is therefore:
-
-1. A `@media (prefers-color-scheme: dark)` block overriding the properties, plus
-   a `:root[data-theme="dark"]` block so an explicit toggle wins over the system.
-2. A second stylesheet from `Renderer::syntax_css`, built with a dark theme from
-   `two_face` (`EmbeddedThemeName::OneHalfDark` or `Nord`), scoped under the same
-   selectors.
-3. A key in `src/assets/app.js` that flips `data-theme` on the root element.
-
 ## Mermaid diagrams
 
 Render ```mermaid fences as diagrams.

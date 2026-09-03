@@ -17,8 +17,52 @@
   var tocEnabled = true;
   var spy = null;
 
+  var THEME_KEY = "mark.theme";
+
   function send(message) {
     window.ipc.postMessage(JSON.stringify(message));
+  }
+
+  // ------------------------------------------------------------------ theme
+
+  // With nothing stored the stylesheet follows the system on its own, through a
+  // media query, and keeps following it if the system changes while the window
+  // is open. Storing a choice stamps the root element, which outranks that.
+  function storedTheme() {
+    try {
+      return localStorage.getItem(THEME_KEY);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function applyStoredTheme() {
+    var stored = storedTheme();
+    if (stored === "light" || stored === "dark") document.documentElement.dataset.theme = stored;
+  }
+
+  function shownTheme() {
+    return (
+      document.documentElement.dataset.theme ||
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    );
+  }
+
+  function toggleTheme() {
+    var next = shownTheme() === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch (e) {
+      // Not being able to remember the choice is no reason to refuse it.
+    }
+  }
+
+  function followSystemTheme() {
+    delete document.documentElement.dataset.theme;
+    try {
+      localStorage.removeItem(THEME_KEY);
+    } catch (e) {}
   }
 
   // ------------------------------------------------------------- rendering
@@ -253,6 +297,14 @@
       event.preventDefault();
       return toggleToc();
     }
+    if (key === "d") {
+      event.preventDefault();
+      return toggleTheme();
+    }
+    if (key === "D") {
+      event.preventDefault();
+      return followSystemTheme();
+    }
     if (key === "Home") {
       event.preventDefault();
       return page.scrollTo({ top: 0, behavior: "smooth" });
@@ -273,6 +325,10 @@
     },
     { passive: false }
   );
+
+  // Before anything is on screen, so a remembered choice never shows as a flash
+  // of the other palette.
+  applyStoredTheme();
 
   // Ask for the document. Doing it this way instead of having Rust push on a
   // timer removes the race between the webview loading and the first render.

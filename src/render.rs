@@ -19,6 +19,20 @@ pub type DocDir = Arc<Mutex<PathBuf>>;
 const HL_PREFIX: &str = "hl-";
 const HL_CLASS_STYLE: ClassStyle = ClassStyle::SpacedPrefixed { prefix: HL_PREFIX };
 
+const LIGHT_THEME: EmbeddedThemeName = EmbeddedThemeName::InspiredGithub;
+const DARK_THEME: EmbeddedThemeName = EmbeddedThemeName::OneHalfDark;
+
+/// The four states a palette can be selected by: the system asking for it with
+/// nothing overriding it, and the reader picking it outright.
+///
+/// Both palettes have to be scoped, not just the dark one. A theme only emits
+/// rules for the scopes it actually colours, so leaving one palette unscoped
+/// would let its colours show through wherever the other has nothing to say.
+const LIGHT_BY_DEFAULT: &str = ":root:not([data-theme=\"dark\"])";
+const DARK_BY_DEFAULT: &str = ":root:not([data-theme=\"light\"])";
+const LIGHT_CHOSEN: &str = ":root[data-theme=\"light\"]";
+const DARK_CHOSEN: &str = ":root[data-theme=\"dark\"]";
+
 pub struct Renderer {
     options: Options<'static>,
     adapter: SyntectAdapter,
@@ -80,15 +94,29 @@ impl Renderer {
         }
     }
 
-    /// The stylesheet for the classes the highlighter emits.
+    /// The stylesheet for the classes the highlighter emits, in both palettes.
     ///
-    /// Kept separate from the markup so that swapping the palette (a dark theme,
-    /// say) never means re-rendering the document.
+    /// Keeping the colours out of the markup is what makes this possible at all:
+    /// switching theme is a stylesheet matter, and never means re-rendering the
+    /// document.
+    ///
+    /// Each palette is emitted twice, once per way of arriving at it, because
+    /// the two cannot be written as a single selector -- one is a media query.
+    /// The explicit choices come last so they win the tie on specificity.
     pub fn syntax_css() -> String {
         let themes = two_face::theme::extra();
-        let theme = themes.get(EmbeddedThemeName::InspiredGithub);
-        syntect::html::css_for_theme_with_class_style(theme, HL_CLASS_STYLE)
-            .expect("bundled theme is well-formed")
+        let light = theme_css(&themes, LIGHT_THEME);
+        let dark = theme_css(&themes, DARK_THEME);
+
+        format!(
+            "@media (prefers-color-scheme: light) {{\n{}}}\n\
+             @media (prefers-color-scheme: dark) {{\n{}}}\n\
+             {}\n{}",
+            scope(&light, LIGHT_BY_DEFAULT),
+            scope(&dark, DARK_BY_DEFAULT),
+            scope(&light, LIGHT_CHOSEN),
+            scope(&dark, DARK_CHOSEN),
+        )
     }
 
     /// Render a document body. The surrounding page comes from assets/shell.html.
@@ -98,6 +126,57 @@ impl Renderer {
         let html = markdown_to_html_with_plugins(markdown, &self.options, &plugins);
         rewrite_raw_html(&html, &self.rewrite)
     }
+}
+
+fn theme_css(themes: &two_face::theme::EmbeddedLazyThemeSet, name: EmbeddedThemeName) -> String {
+    syntect::html::css_for_theme_with_class_style(themes.get(name), HL_CLASS_STYLE)
+        .expect("bundled theme is well-formed")
+}
+
+/// Restrict every rule in a generated stylesheet to a scope.
+///
+/// syntect emits a flat list of class selectors and one comment at the top, so
+/// this never has to deal with nesting or at-rules.
+fn scope(css: &str, prefix: &str) -> String {
+    let mut out = String::with_capacity(css.len() * 2);
+
+    for rule in without_comments(css).split_inclusive('}') {
+        let Some((selectors, declarations)) = rule.split_once('{') else {
+            continue; // whitespace trailing the last rule
+        };
+
+        let selectors = selectors.trim();
+        if selectors.is_empty() {
+            continue;
+        }
+
+        for (index, selector) in selectors.split(',').enumerate() {
+            out.push_str(if index == 0 { "" } else { ", " });
+            out.push_str(prefix);
+            out.push(' ');
+            out.push_str(selector.trim());
+        }
+        out.push_str(" {");
+        out.push_str(declarations);
+        out.push('\n');
+    }
+
+    out
+}
+
+fn without_comments(css: &str) -> String {
+    let mut out = String::with_capacity(css.len());
+    let mut rest = css;
+
+    while let Some(start) = rest.find("/*") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("*/") {
+            Some(end) => rest = &rest[start + end + 2..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Turns a URL written in a document into one the `mark://` handler understands,
@@ -270,5 +349,81 @@ mod tests {
     #[test]
     fn syntax_css_covers_the_prefixed_classes() {
         assert!(Renderer::syntax_css().contains(".hl-"));
+    }
+
+    #[test]
+    fn syntax_css_carries_both_palettes() {
+        let css = Renderer::syntax_css();
+        for scope in [
+            "@media (prefers-color-scheme: light)",
+            "@media (prefers-color-scheme: dark)",
+            LIGHT_CHOSEN,
+            DARK_CHOSEN,
+        ] {
+            assert!(css.contains(scope), "missing {scope}");
+        }
+    }
+
+    /// An unscoped rule would show through in the other palette wherever that
+    /// one happens to have no rule of its own -- the kind of thing that only
+    /// turns up on one keyword in one language.
+    #[test]
+    fn every_syntax_rule_is_scoped() {
+        let css = Renderer::syntax_css();
+        let unscoped: Vec<&str> = css
+            .split('}')
+            .filter_map(|rule| rule.split_once('{'))
+            .map(|(selectors, _)| selectors.trim())
+            .filter(|selectors| selectors.starts_with(".hl-"))
+            .collect();
+        assert!(unscoped.is_empty(), "unscoped rules: {unscoped:?}");
+    }
+
+    /// The stylesheet spells the dark palette out twice, once per selector the
+    /// syntax colours are also scoped to. Nothing in CSS keeps the two copies in
+    /// step, so check it here.
+    #[test]
+    fn both_dark_palettes_declare_the_same_tokens() {
+        let css = include_str!("assets/style.css");
+        let by_default = declarations(css, DARK_BY_DEFAULT);
+        let chosen = declarations(css, DARK_CHOSEN);
+
+        assert!(by_default.len() > 10, "{by_default:?}");
+        assert_eq!(by_default, chosen);
+    }
+
+    /// The declarations of the first rule using `selector`, sorted.
+    fn declarations(css: &str, selector: &str) -> Vec<String> {
+        let at = css.find(selector).expect("selector is in the stylesheet");
+        let open = at + css[at..].find('{').expect("the block opens");
+        let close = open + css[open..].find('}').expect("the block closes");
+
+        let mut lines: Vec<String> = css[open + 1..close]
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect();
+        lines.sort();
+        lines
+    }
+
+    #[test]
+    fn scoping_prefixes_every_selector_in_a_list() {
+        let scoped = scope(".hl-a, .hl-b .hl-c {\n color: red;\n}\n", ":root[x]");
+        assert_eq!(
+            scoped.trim(),
+            ":root[x] .hl-a, :root[x] .hl-b .hl-c {\n color: red;\n}"
+        );
+    }
+
+    #[test]
+    fn scoping_drops_the_generated_comment() {
+        let scoped = scope(
+            "/*\n * theme \"X\"\n */\n\n.hl-a {\n color: red;\n}\n",
+            ".s",
+        );
+        assert!(!scoped.contains("theme"), "{scoped}");
+        assert!(scoped.starts_with(".s .hl-a {"), "{scoped}");
     }
 }
