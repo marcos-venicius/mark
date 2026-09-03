@@ -1,0 +1,99 @@
+# Builds the Windows binary on every push to main and keeps it downloadable from
+# a single unchanging link: the "latest" prerelease.
+name: windows
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - README.md
+      - FUTURE.md
+  workflow_dispatch:
+
+# The release is rewritten in place, so two pushes landing together would race to
+# delete and recreate the same tag. Newer wins, older is cancelled.
+concurrency:
+  group: windows-latest-release
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  # Without this the .exe imports VCRUNTIME140.dll and only starts on machines
+  # that have the VC++ redistributable. Folding the runtime in costs about
+  # 140 KB and leaves a binary that needs nothing but Windows itself.
+  RUSTFLAGS: -C target-feature=+crt-static
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pin the toolchain
+        run: rustup default stable && rustup update stable
+
+      - name: Cache the build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: windows-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Rename
+        run: Copy-Item target/release/mark.exe mark-windows-x64.exe
+        shell: pwsh
+
+      # A binary that cannot print its own version is not worth publishing, and
+      # this is the one place the .exe can actually be run.
+      - name: Smoke test
+        run: ./mark-windows-x64.exe --version
+        shell: pwsh
+
+      # crt-static above and the static WebView2 loader are both invisible until
+      # someone runs the .exe on a machine missing the file -- and this runner is
+      # not that machine, since it has the redistributable. So read the imports
+      # instead of trusting them.
+      - name: Check for stowaway dependencies
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -products * -find '**\Hostx64\x64\dumpbin.exe' |
+            Select-Object -First 1
+          if (-not $dumpbin) {
+            Write-Warning "dumpbin not found, cannot check imports"
+            exit 0
+          }
+          $stowaways = & $dumpbin /dependents mark-windows-x64.exe |
+            Select-String -Pattern 'WebView2Loader|VCRUNTIME'
+          if ($stowaways) {
+            Write-Error "The binary depends on files that are not part of Windows:`n$stowaways"
+            exit 1
+          }
+          Write-Output "No stowaways."
+
+      # Delete and recreate rather than upload over the top: --cleanup-tag moves
+      # the tag to this commit, so "latest" points at what it actually contains.
+      # bash, not pwsh: "|| true" on a first run where the release does not exist
+      # yet behaves the same in every shell version.
+      - name: Publish to the latest prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest mark-windows-x64.exe \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Latest build from main" \
+            --notes "Built from $GITHUB_SHA on $(date -u +%Y-%m-%d). This is the tip of main, not a tagged release."
