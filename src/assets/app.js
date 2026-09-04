@@ -249,7 +249,7 @@
   // ---------------------------------------------------------------- sidebar
 
   function buildToc() {
-    if (spy) spy.disconnect();
+    spy = null;
     tocList.textContent = "";
 
     var headings = content.querySelectorAll("h1[id], h2[id], h3[id], h4[id]");
@@ -280,29 +280,41 @@
     return clone.textContent.trim();
   }
 
-  // Highlight the entry for whichever heading is nearest the top of the view.
+  // Highlight the entry for the section the reader is in: the reading line sits
+  // a quarter of the way down the view, and the section is the last heading to
+  // have crossed it. This is measured on demand rather than watched with an
+  // IntersectionObserver, because the end of the page is not a heading crossing
+  // a line -- there is no event there to hear, and that is where a short final
+  // section leaves the reader.
   function watchHeadings(headings) {
-    var visible = new Set();
+    spy = function () {
+      // Neither end of the scroll can be read off the line, so each answers for
+      // itself. At the top the document opens on its own title -- which is also
+      // the whole of a document that fits the window and never scrolls at all.
+      if (page.scrollTop <= 2) return markActive(headings[0].id);
 
-    spy = new IntersectionObserver(
-      function (entries) {
-        entries.forEach(function (entry) {
-          if (entry.isIntersecting) visible.add(entry.target.id);
-          else visible.delete(entry.target.id);
-        });
+      // At the bottom a short final section runs out of page before its heading
+      // can reach the line, so that entry would never light up however far the
+      // reader scrolled. Once the page has been scrolled as far as it goes, the
+      // section they are in is simply the last one on screen.
+      var view = page.getBoundingClientRect();
+      var line = scrolledToEnd() ? view.bottom : view.top + view.height * 0.25;
 
-        var first = null;
-        headings.forEach(function (heading) {
-          if (!first && visible.has(heading.id)) first = heading.id;
-        });
-        if (first) markActive(first);
-      },
-      { root: page, rootMargin: "0px 0px -75% 0px" }
-    );
+      var chosen = headings[0].id;
+      headings.forEach(function (heading) {
+        if (heading.getBoundingClientRect().top < line) chosen = heading.id;
+      });
+      markActive(chosen);
+    };
+    spy();
+  }
 
-    headings.forEach(function (heading) {
-      spy.observe(heading);
-    });
+  // True only when there is something to scroll and all of it has been
+  // scrolled. A document that fits the window is not at its end for this
+  // purpose: nothing in it is out of reach, so the reading line still holds.
+  function scrolledToEnd() {
+    var slack = page.scrollHeight - page.clientHeight;
+    return slack > 2 && page.scrollTop >= slack - 2;
   }
 
   function markActive(id) {
@@ -335,7 +347,12 @@
 
   function jumpTo(id) {
     var target = document.getElementById(id) || content.querySelector("[name='" + id + "']");
-    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    // A document that fits the window does not scroll at all, so nothing else
+    // would ever tell the sidebar which entry the reader picked. Where the page
+    // does scroll, the spy settles the highlight a moment later anyway.
+    markActive(id);
   }
 
   // -------------------------------------------------------------- find bar
@@ -413,6 +430,8 @@
   function setZoom(step) {
     zoom = Math.max(0, Math.min(ZOOM_STEPS.length - 1, step));
     document.documentElement.style.fontSize = BASE_FONT_SIZE * ZOOM_STEPS[zoom] + "px";
+    // Every heading has just moved, and a zoom on its own scrolls nothing.
+    updateSpy();
   }
 
   // -------------------------------------------------------------- shortcuts
@@ -514,6 +533,15 @@
       return page.scrollTo({ top: page.scrollHeight, behavior: "smooth" });
     }
   });
+
+  // What the sidebar highlights depends on where the reading line falls, so it
+  // is worked out again whenever the page moves under it or the layout changes.
+  page.addEventListener("scroll", updateSpy, { passive: true });
+  window.addEventListener("resize", updateSpy);
+
+  function updateSpy() {
+    if (spy) spy();
+  }
 
   // Ctrl+wheel is the other half of what people expect from zoom.
   page.addEventListener(
