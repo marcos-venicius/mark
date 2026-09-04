@@ -61,7 +61,15 @@ take it with it. Bad arguments are still reported before that happens, with a
 non-zero exit code. `--foreground` turns it off, which is what you want when
 running `mark` under a supervisor or capturing its output.
 
-On Windows the process still holds the console; see [FUTURE.md](FUTURE.md).
+On Windows there is nothing to hand back: the binary is a GUI program, so it
+never takes the console over, and nothing flashes up when a `.md` file is opened
+from Explorer. `--help`, `--version` and argument errors still print — the
+process borrows the console it was launched from for as long as it takes to
+write them, and a redirection such as `mark --version > version.txt` is honoured
+as usual. What a GUI program cannot do is make the shell wait for it: the prompt
+comes back before the text does, and `%ERRORLEVEL%` is not the program's, so a
+script that needs the exit code wants `start /wait mark --version`.
+`--foreground` is accepted and does nothing there.
 
 ## What it renders
 
@@ -137,6 +145,14 @@ language, which is exactly the sort of thing nobody notices for months.
 The fork that detaches from the terminal happens before anything starts a thread
 or touches GTK. Forking past either leaves the child holding locks that nothing
 will ever release, so the order is not incidental.
+
+Windows has no fork, and a console application cannot give its console back. The
+equivalent is being a GUI program from the start, which is what the binary is —
+at the price of having no console at all, not even for `--version`. So the few
+things `mark` prints attach to the console of whoever launched it and fill in the
+standard handles by hand, leaving alone any the shell had already provided, which
+is what keeps redirection working. Nothing stays attached: a window tied to the
+terminal it came from would close with it.
 
 On Unix the webview is attached through the window's GTK container rather than
 through a raw window handle. wry's generic path only accepts an X11 handle, so a

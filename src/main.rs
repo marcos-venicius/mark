@@ -1,10 +1,18 @@
 //! mark -- open a Markdown file in a window and render it.
 
+// Windows builds for the GUI subsystem. A console application cannot hand its
+// console back the way the fork in `detach` does, and it flashes a console
+// window up when a document is opened from Explorer; a GUI one does neither.
+// The attribute is ignored on every other target. What it costs is a process
+// with no console at all, which is what `attach_console` is for.
+#![windows_subsystem = "windows"]
+
 mod protocol;
 mod render;
 mod watcher;
 
 use std::ffi::OsString;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -64,7 +72,7 @@ enum UserEvent {
 
 fn main() {
     if let Err(error) = run() {
-        eprintln!("mark: {error:#}");
+        print_err(&format!("mark: {error:#}\n"));
         std::process::exit(1);
     }
 }
@@ -142,11 +150,11 @@ fn parse_args() -> Result<Option<Invocation>> {
     for argument in std::env::args_os().skip(1) {
         match argument.to_str() {
             Some("-h" | "--help") => {
-                print!("{USAGE}");
+                print_out(USAGE);
                 return Ok(None);
             }
             Some("-V" | "--version") => {
-                println!("mark {}", env!("CARGO_PKG_VERSION"));
+                print_out(&format!("mark {}\n", env!("CARGO_PKG_VERSION")));
                 return Ok(None);
             }
             Some("-f" | "--foreground") => foreground = true,
@@ -161,7 +169,7 @@ fn parse_args() -> Result<Option<Invocation>> {
     let Some(file) = file else {
         // Being called with no file is a mistake, not a request for help, so the
         // usage goes to stderr and the exit code says so.
-        eprint!("{USAGE}");
+        print_err(USAGE);
         std::process::exit(2);
     };
 
@@ -216,10 +224,103 @@ fn detach() {
     }
 }
 
-/// On Windows a console application cannot hand its console back, and the GUI
-/// subsystem is the proper fix rather than a fork. See FUTURE.md.
+/// There is nothing to detach from: a GUI-subsystem process never held a console
+/// in the first place, so the prompt was never taken away. See the attribute at
+/// the top of this file, and `attach_console` for the other half of the bargain.
 #[cfg(not(unix))]
 fn detach() {}
+
+/// Everything `mark` says for itself goes through these two, because on Windows
+/// there may be no terminal to say it to until one is asked for.
+///
+/// The write is `print!`'s job everywhere else, but `print!` panics when there is
+/// nowhere to write -- which on Windows is an ordinary situation, a document
+/// opened from Explorer with nothing redirected. A viewer that aborts over an
+/// unread `--version` would be a poor trade for a message nobody can see, so the
+/// error is dropped instead.
+fn print_out(text: &str) {
+    attach_console();
+    let _ = std::io::stdout().write_all(text.as_bytes());
+}
+
+fn print_err(text: &str) {
+    attach_console();
+    let _ = std::io::stderr().write_all(text.as_bytes());
+}
+
+/// Borrow the console of whoever launched us, for as long as it takes to print.
+///
+/// A GUI-subsystem process starts without one, so `--help`, `--version` and a
+/// bad argument would otherwise be written to handles that do not exist. The
+/// standard slots have to be filled in by hand as well: they are inherited from
+/// the parent, and a program with no console inherits nothing.
+///
+/// Only the paths that print and then exit call this. Staying attached for the
+/// life of the window would tie the document to that terminal -- closing the
+/// terminal would send the window a close event, which is the thing detaching
+/// exists to prevent.
+#[cfg(windows)]
+fn attach_console() {
+    use std::ptr;
+    use windows_sys::core::w;
+    use windows_sys::Win32::Foundation::{GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+    use windows_sys::Win32::System::Console::{
+        AttachConsole, GetStdHandle, SetStdHandle, ATTACH_PARENT_PROCESS, STD_ERROR_HANDLE,
+        STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    };
+
+    // SAFETY: plain Win32 calls. The only pointers handed over are the two wide
+    // string literals, which are static, and a null where the call accepts one.
+
+    // Fails when there is no console to attach to -- opened from Explorer, say.
+    // Nothing can be done about that and nothing needs to be: the loop below
+    // still has the redirected case to deal with.
+    let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+
+    // `mark --version > version.txt` inherits a real handle for stdout from the
+    // shell, redirection being the shell's job and not the subsystem's.
+    // Overwriting it would put the text on the console and leave the file empty,
+    // so only the empty slots are filled in.
+    for (slot, device) in [
+        (STD_INPUT_HANDLE, w!("CONIN$")),
+        (STD_OUTPUT_HANDLE, w!("CONOUT$")),
+        (STD_ERROR_HANDLE, w!("CONOUT$")),
+    ] {
+        let inherited = unsafe { GetStdHandle(slot) };
+        if !inherited.is_null() && inherited != INVALID_HANDLE_VALUE {
+            continue;
+        }
+
+        // Both console devices are opened for reading and writing, which is what
+        // they expect however the handle is used afterwards. Without a console
+        // this fails, and the slot is left as it was: empty, and printing to it
+        // goes nowhere rather than anywhere wrong.
+        let opened = unsafe {
+            CreateFileW(
+                device,
+                GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                ptr::null(),
+                OPEN_EXISTING,
+                0,
+                ptr::null_mut(),
+            )
+        };
+        if opened != INVALID_HANDLE_VALUE {
+            // Only fails on a slot that is not one of the three, and those are
+            // the three literals above.
+            let _ = unsafe { SetStdHandle(slot, opened) };
+        }
+    }
+}
+
+/// Everywhere else the streams are already wired up -- inherited from the shell,
+/// or pointed at /dev/null by `detach`.
+#[cfg(not(windows))]
+fn attach_console() {}
 
 /// Where the reader should end up after the page is replaced.
 #[derive(Clone, Copy)]

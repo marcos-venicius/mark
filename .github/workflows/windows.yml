@@ -55,23 +55,42 @@ jobs:
         shell: pwsh
 
       # A binary that cannot print its own version is not worth publishing, and
-      # this is the one place the .exe can actually be run.
+      # this is the one place the .exe can actually be run. A GUI-subsystem
+      # program is not waited for and its exit code is not reported back to the
+      # shell, so it is started deliberately rather than invoked; the redirected
+      # output doubles as the check that attaching to the console left the
+      # handle the shell had already provided alone.
       - name: Smoke test
-        run: ./mark-windows-x64.exe --version
         shell: pwsh
+        run: |
+          $mark = Start-Process ./mark-windows-x64.exe -ArgumentList '--version' `
+            -Wait -PassThru -NoNewWindow -RedirectStandardOutput version.txt
+          if ($mark.ExitCode -ne 0) {
+            Write-Error "mark --version exited with $($mark.ExitCode)"
+            exit 1
+          }
+          $version = (Get-Content version.txt -Raw).Trim()
+          if ($version -notmatch '^mark \d+\.\d+\.\d+$') {
+            Write-Error "mark --version printed '$version'"
+            exit 1
+          }
+          Write-Output $version
 
       # crt-static above and the static WebView2 loader are both invisible until
       # someone runs the .exe on a machine missing the file -- and this runner is
       # not that machine, since it has the redistributable. So read the imports
-      # instead of trusting them.
-      - name: Check for stowaway dependencies
+      # instead of trusting them. The subsystem comes out of the same headers: a
+      # console binary would keep hold of the terminal for as long as the window
+      # is open, and flash a black rectangle up when a document is opened from
+      # Explorer.
+      - name: Read the headers
         shell: pwsh
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $dumpbin = & $vswhere -latest -products * -find '**\Hostx64\x64\dumpbin.exe' |
             Select-Object -First 1
           if (-not $dumpbin) {
-            Write-Warning "dumpbin not found, cannot check imports"
+            Write-Warning "dumpbin not found, cannot read the headers"
             exit 0
           }
           $stowaways = & $dumpbin /dependents mark-windows-x64.exe |
@@ -81,6 +100,13 @@ jobs:
             exit 1
           }
           Write-Output "No stowaways."
+          $subsystem = & $dumpbin /headers mark-windows-x64.exe |
+            Select-String -Pattern 'subsystem \(Windows'
+          if ("$subsystem" -notmatch 'Windows GUI') {
+            Write-Error "Not a GUI binary: $subsystem"
+            exit 1
+          }
+          Write-Output "Windows GUI subsystem."
 
       # Delete and recreate rather than upload over the top: --cleanup-tag moves
       # the tag to this commit, so "latest" points at what it actually contains.

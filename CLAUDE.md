@@ -45,11 +45,11 @@ Rust pushing on a timer, which removes the race with the webview loading.
 
 Shared state is one thing: `DocDir = Arc<Mutex<PathBuf>>` (`src/render.rs:15`), the
 directory of the document on screen. The URL rewriter and the protocol handler both read
-it; `App::navigated` (`src/main.rs:314`) swaps it when the reader follows a link.
+it; `App::navigated` (`src/main.rs:408`) swaps it when the reader follows a link.
 
 The Rust/page boundary is one channel each way — `evaluate_script` down, and
-`decode_message` (`src/main.rs:392`) over `{"type": ...}` JSON up. Page behaviour that
-needs the filesystem becomes a variant of `enum UserEvent` (`src/main.rs:49`) and a case
+`decode_message` (`src/main.rs:486`) over `{"type": ...}` JSON up. Page behaviour that
+needs the filesystem becomes a variant of `enum UserEvent` (`src/main.rs:56`) and a case
 in `decode_message`. Nothing else crosses.
 
 ## Invariants
@@ -58,11 +58,12 @@ Each of these is load-bearing. The comment above it says the same thing at more 
 
 | Invariant | Where | If ignored |
 | --- | --- | --- |
-| Fork before any thread starts or anything touches GTK | `src/main.rs:188` | the child holds locks nothing will release |
+| Fork before any thread starts or anything touches GTK | `src/main.rs:195` | the child holds locks nothing will release |
 | Relative URLs become absolute at render time, raw HTML included | `src/render.rs:66`, `:245` | the webview flattens `../` and the image is never found |
-| Attach the webview through the GTK vbox, not a raw handle | `src/main.rs:369` | wry refuses a native Wayland session outright |
+| Attach the webview through the GTK vbox, not a raw handle | `src/main.rs:463` | wry refuses a native Wayland session outright |
 | Keep `Access` and `Modify(Metadata)` out of the watcher | `src/watcher.rs:57` | rendering opens the file, which is reported as a change, forever |
 | Scope both palettes; `@media print` comes last | `src/render.rs:114` | one stray token in one language; a printout in pale colours |
+| Fill in only the standard handles Windows left empty | `src/main.rs:286` | `mark --version > out.txt` prints to the console and leaves the file empty |
 
 Two more are there because `render.unsafe = true` lets documents bring their own HTML: the
 Content Security Policy in `src/assets/shell.html` (`default-src 'none'`,
@@ -87,9 +88,14 @@ Things written down nowhere else:
 - The README's `cargo run -- example.md` refers to a file that does not exist. Open
   `README.md` instead.
 - `.github/workflows/windows.yml` is the only workflow. It builds the `.exe`, smoke-tests
-  `--version`, reads the imports with `dumpbin` to catch a stray `VCRUNTIME` or
-  `WebView2Loader`, and rewrites the `latest` prerelease in place. It does not run
-  `cargo test`, `clippy` or `fmt`, and there is no Linux CI at all.
+  `--version` through `Start-Process` (a GUI-subsystem program is not waited for, and
+  the redirected output is also the check that the inherited handle survived), reads
+  the headers with `dumpbin` to catch a stray `VCRUNTIME` or `WebView2Loader` and to
+  confirm the GUI subsystem, and rewrites the `latest` prerelease in place. It does not
+  run `cargo test`, `clippy` or `fmt`, and there is no Linux CI at all.
+- The Windows half of `main.rs` cannot be built here, but it can be type-checked:
+  `rustup target add x86_64-pc-windows-msvc` and then `cargo check` on a scratch crate
+  holding the same code. The full crate does not cross-check -- `onig_sys` compiles C.
 - Tests live inline in `#[cfg(test)] mod tests`. There is no `tests/` directory, and
   `main.rs` and `watcher.rs` have none.
 - Building on Linux needs `libwebkit2gtk-4.1-dev` and `libsoup-3.0-dev`; Rust 1.85 or newer.
@@ -133,7 +139,6 @@ see Ground rules.
 
 ## Out of scope, on purpose
 
-Mermaid diagrams, LaTeX, detaching from the console on Windows, a headless `--pdf`, a
-`.desktop` entry, tabs. None of these were forgotten; each was measured and deferred, and
-`FUTURE.md` records the reasoning. Proposing one means picking that note back up, not
-starting from scratch.
+Mermaid diagrams, LaTeX, a headless `--pdf`, a `.desktop` entry, tabs. None of these
+were forgotten; each was measured and deferred, and `FUTURE.md` records the reasoning.
+Proposing one means picking that note back up, not starting from scratch.

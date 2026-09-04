@@ -25,6 +25,19 @@ wry = "0.56"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# Nothing new is being pulled in: windows-sys is already compiled for Windows,
+# by notify -> walkdir -> winapi-util. The features are declarations and nothing
+# else -- Win32_Security is in the list because CreateFileW takes a pointer to a
+# SECURITY_ATTRIBUTES that this program only ever passes as null.
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+]
+
 [dependencies.comrak]
 version = "0.54"
 default-features = false

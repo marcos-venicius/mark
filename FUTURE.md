@@ -21,19 +21,6 @@ comrak already has the parsing side: setting `extension.math_dollars` (and
 its script plus its font files, around 2 MB embedded, served over `mark://` and
 run from `app.js` after each render.
 
-## Detaching from the console on Windows
-
-On Unix `mark` forks and hands the terminal back. A Windows console application
-cannot do that; the equivalent is building for the GUI subsystem with
-`#![windows_subsystem = "windows"]`, which also stops a console window flashing
-up when the app is launched from Explorer.
-
-The catch is that a GUI-subsystem process has no console at all, so `--help`,
-`--version` and argument errors would go nowhere. The usual fix is calling
-`AttachConsole(ATTACH_PARENT_PROCESS)` before printing. That is a small amount of
-Win32 for someone with a Windows machine to write and actually test; it was left
-out rather than shipped unverified.
-
 ## Smaller ideas
 
 - Export the rendered document to HTML. PDF is covered by Ctrl P, which
