@@ -367,6 +367,61 @@ mod tests {
         assert!(html.contains("href=\"https://example.com\""), "{html}");
     }
 
+    /// The examples are the only documents in the repository that mark is asked
+    /// to open, and every path in them is written by hand: a renamed file or a
+    /// moved asset shows up as a dead link in a window, which nothing else here
+    /// would catch.
+    #[test]
+    fn the_examples_point_at_files_that_are_really_there() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+        let renderer = Renderer::new(Arc::new(Mutex::new(dir.clone())));
+        let mut checked = 0;
+
+        for entry in std::fs::read_dir(&dir).expect("the examples are there") {
+            let file = entry.expect("a directory entry").path();
+            if file.extension().and_then(|ext| ext.to_str()) != Some("md") {
+                continue;
+            }
+
+            let markdown = std::fs::read_to_string(&file).expect("an example is readable");
+            let html = renderer.render(&markdown);
+
+            for url in local_urls(&html) {
+                let target = protocol::path_from_url(&url).expect("a rewritten url");
+                // images.md points at one file that is not there on purpose, to
+                // show what a broken image looks like.
+                if target.file_name().is_some_and(|name| name == "does-not-exist.png") {
+                    continue;
+                }
+                assert!(
+                    target.exists(),
+                    "{} points at {}",
+                    file.display(),
+                    target.display()
+                );
+                checked += 1;
+            }
+        }
+
+        assert!(checked > 10, "only {checked} paths were checked");
+    }
+
+    /// Every `href` and `src` in some rendered HTML that our own handler serves.
+    fn local_urls(html: &str) -> Vec<String> {
+        let mut urls = Vec::new();
+        let mut rest = html;
+
+        while let Some(at) = rest.find("=\"").map(|at| at + 2) {
+            let Some(end) = rest[at..].find('"') else { break };
+            let value = &rest[at..at + end];
+            if protocol::path_from_url(value).is_some() {
+                urls.push(value.to_owned());
+            }
+            rest = &rest[at + end..];
+        }
+        urls
+    }
+
     #[test]
     fn syntax_css_covers_the_prefixed_classes() {
         assert!(Renderer::syntax_css().contains(".hl-"));

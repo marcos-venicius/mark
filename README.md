@@ -276,5 +276,10 @@ would involve.
 ```sh
 cargo test          # rendering and protocol tests
 cargo clippy        # lints
-cargo run -- example.md
+cargo run -- examples/README.md
 ```
+
+[`examples/`](examples/) holds five documents that between them use everything
+on this page — the Markdown, the highlighting, the diagrams, the images and
+each kind of link. They link to one another, so opening the first is also a way
+to try the history keys.

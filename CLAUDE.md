@@ -96,17 +96,18 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 33 tests: 19 in render.rs, 8 in protocol.rs, 6 in main.rs
+cargo test          # 34 tests: 20 in render.rs, 8 in protocol.rs, 6 in main.rs
 cargo clippy
-cargo run -- README.md
+cargo run -- examples/README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package
 ./uninstall.sh      # the counterpart; same PREFIX (default ~/.local)
 ```
 
 Things written down nowhere else:
 
-- The README's `cargo run -- example.md` refers to a file that does not exist. Open
-  `README.md` instead.
+- `examples/` holds five linked documents covering everything the viewer renders,
+  and `the_examples_point_at_files_that_are_really_there` follows every path in
+  them. It is what `cargo run --` should open while working on the page.
 - `.github/workflows/windows.yml` is the only workflow. It builds the `.exe`, smoke-tests
   `--version` through `Start-Process` (a GUI-subsystem program is not waited for, and
   the redirected output is also the check that the inherited handle survived), reads
