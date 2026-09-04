@@ -295,7 +295,19 @@ hr {
   background: var(--border);
 }
 
-img { display: block; max-width: 100%; margin: 1.4em auto; border-radius: 8px; }
+/* height: auto is what keeps the shape. max-width overrides a width="1200"
+   attribute, but nothing overrides the height="300" beside it, so a document
+   that gives both -- and render.unsafe = true means any document may -- would
+   have its width scaled to the column and its height left at the number in the
+   markup. The image comes out stretched, and by a different amount in every
+   window size. */
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.4em auto;
+  border-radius: 8px;
+}
 img.inline { display: inline; margin: 0; vertical-align: text-bottom; }
 
 kbd {
