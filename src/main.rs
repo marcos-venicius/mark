@@ -671,9 +671,8 @@ mod tests {
     }
 
     /// The extensions the Windows installer registers, read back out of the
-    /// script. Nothing else in the build looks at that file from a machine that
-    /// can run the tests.
-    fn registered_extensions() -> Vec<String> {
+    /// script -- one `OpenWithProgids` subkey per extension.
+    fn windows_extensions() -> Vec<String> {
         include_str!("../windows/mark.iss")
             .lines()
             .filter_map(|line| line.split("Software\\Classes\\.").nth(1))
@@ -682,19 +681,34 @@ mod tests {
             .collect()
     }
 
-    /// The installer claims a file type on behalf of a program that would then
-    /// refuse to open it -- a document in the "Open with" menu that greets the
-    /// reader with an error.
+    /// The same list on Linux, which reaches the desktop as glob patterns in the
+    /// MIME package rather than as registry keys.
+    fn linux_extensions() -> Vec<String> {
+        include_str!("../linux/mark.xml")
+            .lines()
+            .filter_map(|line| line.split("<glob pattern=\"*.").nth(1))
+            .filter_map(|rest| rest.split('"').next())
+            .map(|ext| ext.to_owned())
+            .collect()
+    }
+
+    /// Either installer would be claiming a file type on behalf of a program
+    /// that then refuses to open it -- a document in the "Open with" menu that
+    /// greets the reader with an error.
     #[test]
     fn every_registered_extension_is_one_mark_opens() {
-        let registered = registered_extensions();
-        assert!(!registered.is_empty(), "the .iss registers nothing at all");
+        for (platform, registered) in [
+            ("windows/mark.iss", windows_extensions()),
+            ("linux/mark.xml", linux_extensions()),
+        ] {
+            assert!(!registered.is_empty(), "{platform} registers nothing at all");
 
-        for ext in registered {
-            assert!(
-                MARKDOWN_EXTENSIONS.contains(&ext.as_str()),
-                ".{ext} is registered but mark refuses to open it"
-            );
+            for ext in registered {
+                assert!(
+                    MARKDOWN_EXTENSIONS.contains(&ext.as_str()),
+                    ".{ext} is registered in {platform} but mark refuses to open it"
+                );
+            }
         }
     }
 
@@ -703,10 +717,29 @@ mod tests {
     /// the machine is not a thing it gets to do.
     #[test]
     fn plain_text_is_not_claimed() {
-        assert!(
-            !registered_extensions().iter().any(|ext| ext == "txt"),
-            "the installer claims .txt"
-        );
+        for (platform, registered) in [
+            ("windows/mark.iss", windows_extensions()),
+            ("linux/mark.xml", linux_extensions()),
+        ] {
+            assert!(
+                !registered.iter().any(|ext| ext == "txt"),
+                "{platform} claims .txt"
+            );
+        }
+    }
+
+    /// The two lists are written out by hand in two files with nothing in common
+    /// -- an .iss and an XML MIME package -- and the only thing keeping them the
+    /// same set is this. A file type that opens from Explorer but not from a
+    /// Linux file manager is a bug nobody would think to look for.
+    #[test]
+    fn both_platforms_claim_the_same_file_types() {
+        let mut windows = windows_extensions();
+        let mut linux = linux_extensions();
+        windows.sort();
+        linux.sort();
+
+        assert_eq!(windows, linux, "the two installers have drifted apart");
     }
 
     /// Windows picks the entry closest to the size it wants and scales whatever

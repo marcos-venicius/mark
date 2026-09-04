@@ -37,10 +37,22 @@ Windows 11 and is available as a bootstrapper for Windows 10.
 ./install.sh
 ```
 
-That builds in release mode and copies the binary to `~/.local/bin/mark`. Set
-`PREFIX` to install elsewhere.
+That builds in release mode, copies the binary to `~/.local/bin/mark`, and
+registers `mark` with the desktop: an icon in the hicolor theme, a `mark.desktop`
+entry, and a MIME package claiming `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`
+and `.mdx`. Right-click one of those in a file manager and `mark` is in **Open
+With**; tick "always use" once and the double click works from then on. Set
+`PREFIX` to install elsewhere — everything follows it, including the data
+directories.
 
-Or do it by hand:
+```sh
+./uninstall.sh
+```
+
+removes all five files again and refreshes the same caches. Pass the same
+`PREFIX` it was installed with.
+
+Or just the binary, by hand, with no desktop entry:
 
 ```sh
 cargo build --release

@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Application
+Name=mark
+GenericName=Markdown viewer
+Comment=Render a Markdown file in a window
+# install.sh rewrites this line with the absolute path it installed the binary
+# to. Left as a bare command the entry would only work when $PREFIX/bin happens
+# to be on the PATH of whatever launched the file manager, which is not the same
+# PATH the person editing their shell profile is thinking of.
+Exec=mark %f
+Icon=mark
+# %f is one local path, which is exactly what mark takes. %U would offer it
+# URLs and several of them, neither of which it can open.
+Terminal=false
+# mark forks and the parent exits immediately, so nothing is left to claim the
+# startup notification: the desktop would show a launching cursor until it gave
+# up on its own.
+StartupNotify=false
+MimeType=text/markdown;text/x-markdown;
+Categories=Office;Viewer;
+Keywords=markdown;md;viewer;

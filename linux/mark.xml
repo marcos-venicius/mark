@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The file types mark claims, installed into $PREFIX/share/mime and merged into
+  the shared database by update-mime-database.
+
+  All six are declared here rather than only the ones the shared database
+  misses. It already maps .md, .mkd and .markdown on this machine, but that is
+  a property of one distribution's shared-mime-info and not something to build
+  on: older ones carry no text/markdown at all, and a duplicate glob costs
+  nothing, because the database merges them.
+
+  Not .txt. mark will open a text file if asked, and MARKDOWN_EXTENSIONS in
+  src/main.rs lists it, but a Markdown viewer does not get to put itself in the
+  "Open with" menu of every text file on the machine. windows/mark.iss leaves
+  it out for the same reason, and a test holds the two lists together.
+
+  (No double hyphen anywhere in here: XML forbids it inside a comment.)
+-->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="text/markdown">
+    <comment>Markdown document</comment>
+    <glob pattern="*.md"/>
+    <glob pattern="*.markdown"/>
+    <glob pattern="*.mdown"/>
+    <glob pattern="*.mkd"/>
+    <glob pattern="*.mkdn"/>
+    <!--
+      Weight 60, and it is the only one that needs it. The shared database maps
+      *.mdx to application/x-genesis-32x-rom, a Sega 32X cartridge image, at the
+      default weight of 50; at equal weight the system copy wins and a .mdx file
+      is a ROM as far as the desktop is concerned. 60 is the smallest number
+      that settles it.
+    -->
+    <glob pattern="*.mdx" weight="60"/>
+  </mime-type>
+</mime-info>

@@ -7,8 +7,9 @@ it tells you where to look and how to work here.
 
 `mark <file>` opens a window and renders that file. One Rust binary, no bundled browser,
 no frontend build step, about 3.4 MB with the stylesheet, the page script and two fonts
-compiled in. Nothing is written to disk at runtime. Windows gets a second artefact, a
-per-user Inno Setup installer built by the same workflow.
+compiled in. Nothing is written to disk at runtime. Around the binary there is desktop
+integration on both systems: `install.sh` on Linux, and a per-user Inno Setup installer
+that the Windows workflow builds as a second artefact.
 
 ## Ground rules
 
@@ -39,7 +40,9 @@ mark <file>
 ```
 
 Off that path there is `build.rs`, which does one thing and only on Windows: compiles
-`assets/mark.ico` into the `.exe` as a resource.
+`assets/mark.ico` into the `.exe` as a resource. And around the binary, four files that
+never reach it: `linux/mark.desktop`, `linux/mark.xml`, `windows/mark.iss` and
+`assets/mark.ico` are how the desktop learns that `mark` exists.
 
 A document reaches the screen like this: `parse_args` checks the arguments, `detach` hands
 the terminal back, the window and webview come up, and `app.js` sends `{"type":"ready"}`.
@@ -86,10 +89,11 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 28 tests: 16 in render.rs, 7 in protocol.rs, 5 in main.rs
+cargo test          # 29 tests: 16 in render.rs, 7 in protocol.rs, 6 in main.rs
 cargo clippy
 cargo run -- README.md
-./install.sh        # release build, then install into $PREFIX/bin (default ~/.local)
+./install.sh        # release build, then binary + desktop entry + icon + MIME package
+./uninstall.sh      # the counterpart; same PREFIX (default ~/.local)
 ```
 
 Things written down nowhere else:
@@ -104,18 +108,25 @@ Things written down nowhere else:
   builds `mark-setup-x64.exe` with `ISCC`, and rewrites the `latest` prerelease in place
   with both artefacts. It does not run `cargo test`, `clippy` or `fmt`, and there is no
   Linux CI at all.
-- The installer and the icon cannot be built or tested here. `ISCC` is Windows-only, so
-  `windows/mark.iss` is checked by CI and by two tests that read it; `assets/mark.ico` is
-  generated with ImageMagick (see `assets/README.md`) and committed, because the runner
-  has no image tooling. `build.rs` is a no-op off Windows.
+- The Windows installer and the icon cannot be built or tested here. `ISCC` is
+  Windows-only, so `windows/mark.iss` is checked by CI and by the tests that read it;
+  `assets/mark.ico` is generated with ImageMagick (see `assets/README.md`) and committed,
+  because the runner has no image tooling. `build.rs` is a no-op off Windows.
+- The Linux half can be tested, and should be: `./install.sh`, then
+  `gio info -a standard::content-type f.md` for the type and
+  `gio launch ~/.local/share/applications/mark.desktop f.md` for the launch a file
+  manager actually performs. Use `gio`, not `xdg-mime`: `xdg-mime` here shells out to
+  the Perl `mimetype`, which ignores glob weights across databases and disagrees.
+  `./uninstall.sh` afterwards leaves nothing behind.
 - The Windows half of `main.rs` cannot be built here, but it can be type-checked:
   `rustup target add x86_64-pc-windows-msvc` and then `cargo check` on a scratch crate
   holding the same code. The full crate does not cross-check -- `onig_sys` compiles C.
 - Tests live inline in `#[cfg(test)] mod tests`. There is no `tests/` directory, and
-  `watcher.rs` has none. The five in `main.rs` all guard something written down twice or
+  `watcher.rs` has none. The six in `main.rs` all guard something written down twice or
   unreachable from Linux: the shortcut table (rendered into the terminal and the window,
-  and the window's copy cannot be checked from a terminal), the extension list the
-  installer registers against `MARKDOWN_EXTENSIONS`, and the sizes inside the `.ico`.
+  and the window's copy cannot be checked from a terminal), the file types the two
+  installers claim -- against `MARKDOWN_EXTENSIONS` and against each other -- and the
+  sizes inside the `.ico`.
 - Building on Linux needs `libwebkit2gtk-4.1-dev` and `libsoup-3.0-dev`; Rust 1.85 or newer.
 
 ## Style
@@ -154,7 +165,9 @@ see Ground rules.
 | A different syntax theme | `LIGHT_THEME` / `DARK_THEME` in `src/render.rs` |
 | A new embedded asset | the `ASSETS` table in `src/protocol.rs` (`include_bytes!`) |
 | The icon | `assets/mark.svg`, then regenerate `mark.ico` and `mark.png` with the commands in `assets/README.md` — `build.rs` and `windows/mark.iss` both read the `.ico` |
-| The Windows installer | `windows/mark.iss`, and the `Build the installer` step in `.github/workflows/windows.yml`. A new file association is a line in `[Registry]` and has to be an extension `MARKDOWN_EXTENSIONS` already lists |
+| The Windows installer | `windows/mark.iss`, and the `Build the installer` step in `.github/workflows/windows.yml` |
+| The Linux desktop entry | `linux/mark.desktop` and `linux/mark.xml`, installed by `install.sh` and removed by `uninstall.sh` |
+| A new file association | both `windows/mark.iss` and `linux/mark.xml`, never one alone — `both_platforms_claim_the_same_file_types` fails otherwise — and it has to be an extension `MARKDOWN_EXTENSIONS` already lists |
 | Anything in FUTURE.md | pick up the note that is already there; it says what is missing and what it costs |
 
 ## Out of scope, on purpose
@@ -163,8 +176,6 @@ Mermaid diagrams, LaTeX, a headless `--pdf`, tabs. None of these were forgotten;
 was measured and deferred, and `FUTURE.md` records the reasoning. Proposing one means
 picking that note back up, not starting from scratch.
 
-The exception is the first note in `FUTURE.md`, opening a document by double-clicking
-it. The Windows half of that note has shipped -- icon, installer, registry entries. What
-is queued rather than deferred is the Linux half: a `.desktop` entry, a MIME package for
-the extensions the shared database does not map, and an `install.sh` that finally has a
-counterpart to undo it.
+Opening a document by double-clicking it used to be the exception, queued rather than
+deferred. It has shipped on both systems and `FUTURE.md` no longer carries it, so
+everything left in that file is deferred and nothing in it is queued.

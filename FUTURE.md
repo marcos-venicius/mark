@@ -1,42 +1,19 @@
 # Future work
 
 Things left out of the first version, with notes on what it would take to add
-them. The first is queued -- it is what has been asked for next. The rest were
-deliberately deferred.
+them. All of these were deliberately deferred; nothing here is queued.
 
-## Opening a document by double-clicking it
+Opening a document by double-clicking it used to be the first note, and it is
+done on both systems: an icon, a per-user installer and the registry entries on
+Windows, and a desktop entry, a MIME package and an icon in the hicolor theme
+on Linux, installed by `install.sh` and taken away again by `uninstall.sh`.
 
-Register `mark` with the desktop, so a `.md` file in a file manager opens here.
-**The Windows half is done** -- an icon compiled into the `.exe`, a per-user
-installer built by the release workflow, and the ProgId and `OpenWithProgids`
-entries it writes under `HKCU`. What is left is Linux.
-
-The program itself was always ready for it. It takes one file path, it detaches
-on Unix, and it reports a bad path before the window would have opened, so a
-file manager launching it behaves like any other application. What is missing is
-everything around the binary.
-
-**Linux.** A `mark.desktop` in `~/.local/share/applications` with `Exec=mark %f`,
-`Terminal=false` and `MimeType=text/markdown;text/x-markdown;`, installed by
-`install.sh` together with a run of `update-desktop-database` -- and removed
-again by whatever undoes an install, which today is nothing at all: `install.sh`
-has no counterpart. Two catches, one of them now smaller. `mark` opens more
-extensions than the shared MIME database maps to `text/markdown`
-(`MARKDOWN_EXTENSIONS` in `src/main.rs` lists `.mkd`, `.mdown`, `.mdx` and the
-rest), so those want a MIME package of their own under `~/.local/share/mime`.
-And a desktop entry wants an icon, which the project now has: `assets/mark.png`,
-for `~/.local/share/icons/hicolor/256x256/apps/mark.png`, with the SVG next to
-it for a scalable entry.
-
-Cost: nothing new at runtime. An `install.sh` that installs three more files, an
-`uninstall.sh` that does not exist yet, and the MIME package as XML.
-
-Worth knowing, and true on both systems: Windows 10 and 11 do not let an
-application make itself the default for an extension. The UserChoice key is
-hash-protected, and writing it is what malware does. Registering puts `mark` in
-the "Open with" list; the reader still has to pick it once, with "Always use
-this app". This is why the installer promises a menu entry and not a double
-click.
+One thing that came out of it is worth keeping written down. Neither system lets
+an application make itself the default for a file type. On Windows the
+`UserChoice` key is hash-protected, and on Linux the choice lives in the
+reader's own `mimeapps.list`. Both installers put `mark` in the "Open with"
+menu; the reader picks it once. Anything promising a working double click
+straight after installation is promising what the desktop will not do.
 
 ## Mermaid diagrams
 
