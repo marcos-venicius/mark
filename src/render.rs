@@ -304,6 +304,16 @@ mod tests {
         assert!(html.contains("<table>") && html.contains("<th>"), "{html}");
     }
 
+    /// What app.js has to find to draw a diagram: the fence's language on the
+    /// `<code>`, and the source it wrote surviving the trip through the
+    /// highlighter, which sees `mermaid` as a language it does not know.
+    #[test]
+    fn mermaid_fences_keep_their_language_and_their_source() {
+        let html = renderer().render("```mermaid\nflowchart LR\n  A --> B\n```\n");
+        assert!(html.contains("class=\"language-mermaid\""), "{html}");
+        assert!(html.contains("flowchart LR") && html.contains("A --&gt; B"), "{html}");
+    }
+
     #[test]
     fn front_matter_is_not_shown() {
         let html = renderer().render("---\ntitle: Secret\n---\n\n# Body\n");
@@ -427,6 +437,37 @@ mod tests {
 
         assert!(by_default.len() > 10, "{by_default:?}");
         assert_eq!(by_default, chosen);
+    }
+
+    /// A diagram is drawn once per palette and the stylesheet picks one, which
+    /// only works if both ways of arriving at dark say the same thing. The two
+    /// are written out by hand, exactly as the palettes above them are.
+    #[test]
+    fn both_dark_palettes_swap_the_diagram_the_same_way() {
+        let css = include_str!("assets/style.css");
+
+        for selector in [DARK_BY_DEFAULT, DARK_CHOSEN] {
+            for rule in [
+                format!("{selector} .diagram-light {{ display: none; }}"),
+                format!("{selector} .diagram-dark {{ display: block; }}"),
+            ] {
+                assert!(css.contains(&rule), "the stylesheet is missing {rule}");
+            }
+        }
+    }
+
+    /// The two drawings of a diagram are told apart by a class name that app.js
+    /// writes and the stylesheet reads, and nothing else connects them: rename
+    /// it in one file and both palettes end up on the page at once.
+    #[test]
+    fn the_page_and_the_stylesheet_agree_on_the_diagram_classes() {
+        let css = include_str!("assets/style.css");
+        let js = include_str!("assets/app.js");
+
+        for class in ["diagram-light", "diagram-dark"] {
+            assert!(css.contains(&format!(".{class}")), "style.css lost {class}");
+            assert!(js.contains(&format!("\"{class}\"")), "app.js lost {class}");
+        }
     }
 
     /// The declarations of the first rule using `selector`, sorted.

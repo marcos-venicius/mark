@@ -14,6 +14,10 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+# The mermaid bundle is 3.5 MB as it ships and 976 KB in gzip. Embedding it raw
+# would more than double the binary, so it is stored compressed and inflated
+# once, the first time a document turns out to have a diagram in it.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 mime_guess = "2"
 notify = "8"
 open = "5"

@@ -2,7 +2,9 @@
 //! the local files (images, fonts, media) that a document references.
 
 use std::borrow::Cow;
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
+use std::sync::OnceLock;
 
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 use wry::http::{header, Request, Response, StatusCode, Uri};
@@ -58,6 +60,41 @@ const ASSETS: &[(&str, &str, &[u8])] = &[
         include_bytes!("assets/fonts/jetbrains-mono-latin-ext.woff2"),
     ),
 ];
+
+/// Files compiled into the executable compressed, served under [`ASSET_PREFIX`]
+/// after being inflated.
+///
+/// mermaid is 3.5 MB as it ships and 976 KB in gzip, which is the difference
+/// between a viewer that fits in memory twice over and one that carries a
+/// diagram renderer nobody asked for. Most documents have no fence to draw, so
+/// the cost is paid per process and only by the ones that do.
+const PACKED: &[(&str, &str, &[u8])] = &[(
+    "mermaid.min.js",
+    "text/javascript; charset=utf-8",
+    include_bytes!("assets/mermaid/mermaid.min.js.gz"),
+)];
+
+/// The inflated bodies, in the order of [`PACKED`], filled in on first use.
+///
+/// A `OnceLock` in a static is what lets the response keep borrowing the bytes
+/// rather than copying 3.5 MB into every request.
+static UNPACKED: OnceLock<Vec<Vec<u8>>> = OnceLock::new();
+
+/// Inflate every packed asset. Failing here would mean the bytes compiled into
+/// the binary are not the bytes gzip wrote, so an empty body is as useful an
+/// answer as any and the webview reports it as a script that did nothing.
+fn unpacked(index: usize) -> &'static [u8] {
+    &UNPACKED.get_or_init(|| {
+        PACKED
+            .iter()
+            .map(|(_, _, packed)| {
+                let mut body = Vec::new();
+                let _ = flate2::read::GzDecoder::new(*packed).read_to_end(&mut body);
+                body
+            })
+            .collect()
+    })[index]
+}
 
 /// Build a URL the webview will route back to our handler.
 ///
@@ -130,8 +167,11 @@ pub fn serve(
     }
 
     if let Some(name) = path.strip_prefix(ASSET_PREFIX) {
-        return match ASSETS.iter().find(|(n, _, _)| *n == name) {
-            Some((_, mime, body)) => ok(Cow::Borrowed(*body), mime),
+        if let Some((_, mime, body)) = ASSETS.iter().find(|(n, _, _)| *n == name) {
+            return ok(Cow::Borrowed(*body), mime);
+        }
+        return match PACKED.iter().position(|(n, _, _)| *n == name) {
+            Some(index) => ok(Cow::Borrowed(unpacked(index)), PACKED[index].1),
             None => not_found(),
         };
     }
@@ -219,6 +259,19 @@ mod tests {
         let response = serve(&request("/__mark__/app.js"), Path::new("/tmp"), "");
         assert_eq!(response.status(), StatusCode::OK);
         assert!(!response.body().is_empty());
+    }
+
+    /// The one asset that is not stored as it is served. A body the size of the
+    /// gzip file would mean the compressed bytes went out verbatim, which the
+    /// webview would report only as a script that silently did nothing.
+    #[test]
+    fn packed_assets_are_served_inflated() {
+        let response = serve(&request("/__mark__/mermaid.min.js"), Path::new("/tmp"), "");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.body();
+        assert!(body.len() > PACKED[0].2.len() * 2, "{} bytes", body.len());
+        assert!(body.windows(7).any(|w| w == b"mermaid"));
     }
 
     #[test]

@@ -1275,6 +1275,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "comrak",
+ "flate2",
  "libc",
  "mime_guess",
  "notify",

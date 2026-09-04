@@ -8,9 +8,9 @@ that file, and stays out of the way.
 No editor, no preview pane, no browser tab. It reads the file, highlights the
 code, shows the images, and reloads when you save.
 
-The binary is about 3.4 MB and carries everything it needs: the stylesheet, the
-page script, and the two fonts. There is no bundled browser, no frontend build
-step, and nothing written to disk at runtime.
+The binary is about 4.3 MB and carries everything it needs: the stylesheet, the
+page script, the two fonts and the diagram renderer. There is no bundled browser,
+no frontend build step, and nothing written to disk at runtime.
 
 ## Requirements
 
@@ -120,6 +120,9 @@ practical way to see it — a document opened from Explorer never passes a promp
   including ones that point up a directory.
 - **Alerts** — GitHub's `> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`
   and `> [!CAUTION]` callouts.
+- **Mermaid diagrams.** A ```` ```mermaid ```` fence is drawn where it stands,
+  by a renderer compiled into the binary, so it works with no network. A fence
+  that will not parse keeps its source and says why.
 - **Inline HTML**, for the things Markdown has no syntax for.
 - **YAML front matter** is recognised and hidden instead of rendered as prose.
 - **Live reload.** Save the file in your editor and the window updates without
@@ -211,6 +214,13 @@ The document is served to the webview over a custom `mark://` scheme rather than
 `file://`, which is what makes relative image paths resolve correctly no matter
 where the file lives.
 
+A diagram is drawn twice, once in each palette, and the stylesheet shows one of
+them. mermaid writes its colours into the SVG it produces, so a diagram is a
+picture of the theme it was drawn in; the alternative to keeping both is
+redrawing every diagram when the reader presses <kbd>D</kbd> — and having nothing
+to put on paper when a dark page is printed, since the print dialog cannot wait
+for a redraw.
+
 Because documents may contain inline HTML, the page runs under a Content Security
 Policy that permits local assets and remote images and nothing else — no scripts
 from the document, no outbound requests. The protocol handler additionally only
@@ -232,6 +242,7 @@ would. If that matters for a given file, it is worth knowing before opening it.
 | [`notify`](https://crates.io/crates/notify) | Filesystem watching for live reload |
 | [`mime_guess`](https://crates.io/crates/mime_guess) | Content types for served files |
 | [`percent-encoding`](https://crates.io/crates/percent-encoding) | Encoding file paths into URLs |
+| [`flate2`](https://crates.io/crates/flate2) | Inflating the diagram renderer, which is stored compressed |
 | [`serde_json`](https://crates.io/crates/serde_json) | Messages between the page and Rust |
 | [`open`](https://crates.io/crates/open) | Handing links to the desktop |
 | [`anyhow`](https://crates.io/crates/anyhow) | Error reporting |
@@ -241,6 +252,10 @@ And one build dependency, on Windows only, linked into nothing:
 | Crate | Why |
 | --- | --- |
 | [`winresource`](https://crates.io/crates/winresource) | Compiles the icon into `mark.exe`, which cargo will not do on its own |
+
+mermaid is bundled too, under the MIT licence: the 3.5 MB UMD build, stored in
+gzip and inflated the first time a document turns out to have a diagram in it.
+See [src/assets/mermaid/README.md](src/assets/mermaid/README.md).
 
 Two fonts are bundled as well, both under the SIL Open Font Licence 1.1:
 [Inter](https://github.com/rsms/inter) and
@@ -253,8 +268,8 @@ bundled.
 
 ## Not supported yet
 
-Mermaid diagrams and LaTeX formulas are not in this version. See
-[FUTURE.md](FUTURE.md) for what each would involve.
+LaTeX formulas are not in this version. See [FUTURE.md](FUTURE.md) for what that
+would involve.
 
 ## Development
 

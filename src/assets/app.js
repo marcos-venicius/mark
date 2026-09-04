@@ -20,6 +20,23 @@
   var tocEnabled = true;
   var spy = null;
 
+  // Every ```mermaid fence is drawn once per palette. The colours mermaid uses
+  // end up inside the SVG it produces, so a theme cannot be a stylesheet matter
+  // the way it is for the syntax colours unless both drawings are on the page
+  // and the stylesheet picks one -- which is also what keeps a printout from
+  // being a dark diagram on white paper.
+  var DIAGRAM_PALETTES = [
+    { theme: "default", className: "diagram-light" },
+    { theme: "dark", className: "diagram-dark" },
+  ];
+  var mermaidLoading = null;
+  var diagrams = 0;
+
+  // Which document is on screen. A save part way through drawing a diagram
+  // replaces the page under it, and the drawing that finishes afterwards must
+  // not write into a DOM that has already been thrown away.
+  var generation = 0;
+
   var THEME_KEY = "mark.theme";
 
   function send(message) {
@@ -74,14 +91,22 @@
   window.__mark = {
     setContent: function (html, keepScroll) {
       var offset = keepScroll ? page.scrollTop : 0;
+      var mine = (generation += 1);
       content.innerHTML = html;
       labelCodeBlocks();
       wrapTables();
       buildToc();
-      // Images and fonts settle a frame later; restoring after that keeps a
-      // save from nudging the reader off the paragraph they were on.
-      requestAnimationFrame(function () {
-        page.scrollTop = offset;
+      // Diagrams change the height of everything below them, so the scroll is
+      // restored after they have settled rather than before. A document with no
+      // fence to draw resolves immediately and lands in the same frame it
+      // always did.
+      drawDiagrams(mine).then(function () {
+        if (mine !== generation) return;
+        // Images and fonts settle a frame later; restoring after that keeps a
+        // save from nudging the reader off the paragraph they were on.
+        requestAnimationFrame(function () {
+          page.scrollTop = offset;
+        });
       });
     },
   };
@@ -101,6 +126,124 @@
       table.parentNode.insertBefore(wrap, table);
       wrap.appendChild(table);
     });
+  }
+
+  // --------------------------------------------------------------- diagrams
+
+  // Nothing here runs for a document without a ```mermaid fence, which is nearly
+  // all of them: the renderer is not even asked for.
+  function drawDiagrams(mine) {
+    var blocks = [];
+    content.querySelectorAll("pre > code.language-mermaid").forEach(function (code) {
+      blocks.push(code);
+    });
+    if (blocks.length === 0) return Promise.resolve();
+
+    return loadMermaid()
+      .then(function () {
+        // mermaid measures the text to size the boxes it draws around it, so
+        // measuring before Inter has arrived sizes them for the fallback font.
+        return document.fonts.ready;
+      })
+      .then(function () {
+        var chain = Promise.resolve();
+        blocks.forEach(function (code) {
+          chain = chain.then(function () {
+            if (mine !== generation) return null;
+            return drawOne(code, mine);
+          });
+        });
+        return chain;
+      })
+      .catch(function (error) {
+        // Only the renderer failing to load reaches here; a diagram that will
+        // not parse is caught in drawOne, one block at a time.
+        if (mine !== generation) return;
+        blocks.forEach(function (code) {
+          keepSource(code.parentNode, error);
+        });
+      });
+  }
+
+  function drawOne(code, mine) {
+    var pre = code.parentNode;
+    // The fence's own text, whatever the highlighter made of it on the way here.
+    var source = code.textContent;
+    var figure = document.createElement("figure");
+    var chain = Promise.resolve();
+
+    figure.className = "diagram";
+
+    DIAGRAM_PALETTES.forEach(function (palette) {
+      chain = chain
+        .then(function () {
+          diagrams += 1;
+          // strict is what stops a `click` written in a document from naming a
+          // function to run, and the bindFunctions the render hands back -- the
+          // other half of that -- is deliberately never called.
+          mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: "strict",
+            // Without this, a fence that will not parse leaves mermaid's own
+            // error drawing floating in the page, beside the source we keep and
+            // the message we write ourselves. It is one of the settings a
+            // document cannot reach with a directive.
+            suppressErrorRendering: true,
+            theme: palette.theme,
+            // Read off the page rather than written out again: the font stack
+            // lives in style.css and has no business being in two files.
+            fontFamily: getComputedStyle(document.body).fontFamily,
+          });
+          return mermaid.render("mark-diagram-" + diagrams, source);
+        })
+        .then(function (result) {
+          var half = document.createElement("div");
+          half.className = palette.className;
+          half.innerHTML = result.svg;
+          figure.appendChild(half);
+        });
+    });
+
+    return chain
+      .then(function () {
+        if (mine !== generation) return;
+        pre.parentNode.insertBefore(figure, pre);
+        pre.hidden = true;
+      })
+      .catch(function (error) {
+        if (mine !== generation) return;
+        keepSource(pre, error);
+      });
+  }
+
+  // A diagram that will not parse leaves its source where it was, with the
+  // reason above it. Swallowing the fence would lose the diagram and the text it
+  // was written as.
+  function keepSource(pre, error) {
+    var note = document.createElement("p");
+    note.className = "diagram-error";
+    note.textContent = "Diagram: " + ((error && error.message) || String(error));
+    pre.parentNode.insertBefore(note, pre);
+    pre.hidden = false;
+  }
+
+  // Fetched when a document turns out to need it, and once per window. The URL
+  // is relative on purpose: it resolves against the page's own mark:// address,
+  // which differs between platforms, and app.js is served as a static asset with
+  // no placeholder to fill the origin into.
+  function loadMermaid() {
+    if (mermaidLoading) return mermaidLoading;
+
+    mermaidLoading = new Promise(function (resolve, reject) {
+      var script = document.createElement("script");
+      script.src = "/__mark__/mermaid.min.js";
+      script.onload = resolve;
+      script.onerror = function () {
+        reject(new Error("the diagram renderer could not be loaded"));
+      };
+      document.head.appendChild(script);
+    });
+    return mermaidLoading;
   }
 
   // ---------------------------------------------------------------- sidebar

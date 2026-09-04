@@ -377,6 +377,47 @@ pre[data-lang]::before {
   text-transform: uppercase;
 }
 
+/* --------------------------------------------------------------- diagrams */
+
+/* Every ```mermaid fence is on the page twice, drawn once per palette, because
+   mermaid writes its colours into the SVG: which one a reader sees is settled
+   here rather than at render time, and switching theme costs nothing.
+
+   These are the same four ways of arriving at a palette that render.rs scopes
+   the syntax colours to. One list changed without the other is a white diagram
+   on a dark page. The @media print block at the foot of this file is the fifth,
+   and comes last so it wins. */
+
+.diagram {
+  margin: 1.6em 0;
+  text-align: center;
+}
+
+/* mermaid sizes the SVG for the drawing, not for the column it lands in. */
+.diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.diagram-light { display: block; }
+.diagram-dark { display: none; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .diagram-light { display: none; }
+  :root:not([data-theme="light"]) .diagram-dark { display: block; }
+}
+
+:root[data-theme="dark"] .diagram-light { display: none; }
+:root[data-theme="dark"] .diagram-dark { display: block; }
+
+/* Said above the fence mermaid refused, which app.js leaves where it was: the
+   text someone wrote is more use than a gap where a diagram should be. */
+.diagram-error {
+  margin: 1.5em 0 -1.2em;
+  color: var(--caution);
+  font-size: 0.85rem;
+}
+
 /* ----------------------------------------------------------------- tables */
 
 .table-wrap { margin: 1.5em 0; overflow-x: auto; }
@@ -675,6 +716,7 @@ tbody tr:nth-child(even) { background: var(--surface); }
   pre,
   th,
   tbody tr:nth-child(even),
+  .diagram,
   .markdown-alert,
   kbd {
     -webkit-print-color-adjust: exact;
@@ -692,7 +734,20 @@ tbody tr:nth-child(even) { background: var(--surface); }
   blockquote,
   table,
   img,
+  .diagram,
   .markdown-alert { break-inside: avoid; }
+
+  /* A diagram is a picture of the palette it was drawn in, so the dark one is
+     swapped for the light one rather than recoloured. The selectors are the
+     ones above, repeated here and later in the file, which is the same tie
+     broken by order that the palette block uses. */
+  :root .diagram-light,
+  :root[data-theme="dark"] .diagram-light,
+  :root:not([data-theme="light"]) .diagram-light { display: block; }
+
+  :root .diagram-dark,
+  :root[data-theme="dark"] .diagram-dark,
+  :root:not([data-theme="light"]) .diagram-dark { display: none; }
 
   p { orphans: 2; widows: 2; }
 

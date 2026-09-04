@@ -6,10 +6,10 @@ deliberately left out and what each item would cost. This file does not repeat e
 it tells you where to look and how to work here.
 
 `mark <file>` opens a window and renders that file. One Rust binary, no bundled browser,
-no frontend build step, about 3.4 MB with the stylesheet, the page script and two fonts
-compiled in. Nothing is written to disk at runtime. Around the binary there is desktop
-integration on both systems: `install.sh` on Linux, and a per-user Inno Setup installer
-that the Windows workflow builds as a second artefact.
+no frontend build step, about 4.3 MB with the stylesheet, the page script, two fonts
+and the mermaid renderer compiled in. Nothing is written to disk at runtime. Around
+the binary there is desktop integration on both systems: `install.sh` on Linux, and a
+per-user Inno Setup installer that the Windows workflow builds as a second artefact.
 
 ## Ground rules
 
@@ -59,6 +59,12 @@ The Rust/page boundary is one channel each way — `evaluate_script` down, and
 needs the filesystem becomes a variant of `enum UserEvent` (`src/main.rs:72`) and a case
 in `decode_message`. Nothing else crosses while the window is open.
 
+One asset does not travel as it is served. mermaid is 3.5 MB raw against 976 KB in
+gzip, so it lives in `PACKED` (`src/protocol.rs:64`) and is inflated once, into a
+`OnceLock`, the first time a document turns out to have a ```mermaid fence -- the
+page asks for it only then, so nothing else pays for it. `src/assets/mermaid/README.md`
+says which build to fetch and what to check before bumping the version.
+
 Before it opens there is one more path: `build_shell` (`src/main.rs:580`) fills the
 placeholders in `shell.html` once — the asset URLs, the syntax palette, and the help
 panel that `help_html` builds from `SHORTCUTS` (`src/main.rs:51`). Markup that never
@@ -76,6 +82,7 @@ Each of these is load-bearing. The comment above it says the same thing at more 
 | Keep `Access` and `Modify(Metadata)` out of the watcher | `src/watcher.rs:57` | rendering opens the file, which is reported as a change, forever |
 | Scope both palettes; `@media print` comes last | `src/render.rs:114` | one stray token in one language; a printout in pale colours |
 | Fill in only the standard handles Windows left empty | `src/main.rs:308` | `mark --version > out.txt` prints to the console and leaves the file empty |
+| Draw every diagram once per palette; the stylesheet picks one | `src/assets/app.js:28`, `src/assets/style.css:380` | mermaid bakes its colours into the SVG, so `d` would need a redraw and a dark page would print dark |
 
 Two more are there because `render.unsafe = true` lets documents bring their own HTML: the
 Content Security Policy in `src/assets/shell.html` (`default-src 'none'`,
@@ -89,7 +96,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 29 tests: 16 in render.rs, 7 in protocol.rs, 6 in main.rs
+cargo test          # 33 tests: 19 in render.rs, 8 in protocol.rs, 6 in main.rs
 cargo clippy
 cargo run -- README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package
@@ -163,7 +170,8 @@ see Ground rules.
 | A new comrak extension | `Renderer::new` in `src/render.rs`, styling in `src/assets/style.css`, plus a test |
 | Colours or typography | `src/assets/style.css`, both copies of the dark palette |
 | A different syntax theme | `LIGHT_THEME` / `DARK_THEME` in `src/render.rs` |
-| A new embedded asset | the `ASSETS` table in `src/protocol.rs` (`include_bytes!`) |
+| A new embedded asset | the `ASSETS` table in `src/protocol.rs` (`include_bytes!`), or `PACKED` beside it if it is big enough to be worth storing in gzip |
+| A newer mermaid | `src/assets/mermaid/README.md` has the commands and the two properties the bundle has to keep (no `eval`, no fetching) for the CSP to stand |
 | The icon | `assets/mark.svg`, then regenerate `mark.ico` and `mark.png` with the commands in `assets/README.md` — `build.rs` and `windows/mark.iss` both read the `.ico` |
 | The Windows installer | `windows/mark.iss`, and the `Build the installer` step in `.github/workflows/windows.yml` |
 | The Linux desktop entry | `linux/mark.desktop` and `linux/mark.xml`, installed by `install.sh` and removed by `uninstall.sh` |
@@ -172,10 +180,11 @@ see Ground rules.
 
 ## Out of scope, on purpose
 
-Mermaid diagrams, LaTeX, a headless `--pdf`, tabs. None of these were forgotten; each
-was measured and deferred, and `FUTURE.md` records the reasoning. Proposing one means
-picking that note back up, not starting from scratch.
+LaTeX, a headless `--pdf`, tabs. None of these were forgotten; each was measured and
+deferred, and `FUTURE.md` records the reasoning. Proposing one means picking that note
+back up, not starting from scratch.
 
-Opening a document by double-clicking it used to be the exception, queued rather than
-deferred. It has shipped on both systems and `FUTURE.md` no longer carries it, so
-everything left in that file is deferred and nothing in it is queued.
+Two things that were in that file have shipped: opening a document by double-clicking
+it, and mermaid diagrams. `FUTURE.md` carries neither as work any more -- only the
+paragraph each left behind -- so everything still listed there is deferred and nothing
+in it is queued.
