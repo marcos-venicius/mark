@@ -5,6 +5,8 @@ edition = "2021"
 rust-version = "1.85"
 description = "A single-purpose Markdown viewer: mark <file> opens a window and renders it."
 license = "MIT"
+repository = "https://github.com/marcos-venicius/mark"
+authors = ["Marcos Venicius"]
 
 [[bin]]
 name = "mark"
@@ -37,6 +39,12 @@ features = [
     "Win32_Storage_FileSystem",
     "Win32_System_Console",
 ]
+
+# The icon has to reach the .exe as a Win32 resource and cargo will not put it
+# there. Build-time only, Windows only: nothing is linked into the program and
+# nothing new compiles on Linux. See build.rs for why the cfg is on the host.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
 
 [dependencies.comrak]
 version = "0.54"

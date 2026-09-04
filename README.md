@@ -31,6 +31,8 @@ Windows 11 and is available as a bootstrapper for Windows 10.
 
 ## Install
 
+**Linux.**
+
 ```sh
 ./install.sh
 ```
@@ -44,6 +46,25 @@ Or do it by hand:
 cargo build --release
 cp target/release/mark ~/.local/bin/
 ```
+
+**Windows.** Download `mark-setup-x64.exe` from the
+[`latest` prerelease](https://github.com/marcos-venicius/mark/releases/tag/latest),
+which is rebuilt from `main` on every push. It installs for the current user
+only — `%LOCALAPPDATA%\Programs\mark`, no administrator prompt, an entry in the
+Start Menu, and an uninstaller in "Installed apps" that takes the registry keys
+with it.
+
+Installing puts `mark` in the **Open with** menu of `.md`, `.markdown`,
+`.mdown`, `.mkd`, `.mkdn` and `.mdx`. It does not make `mark` the default for
+any of them, and no installer can: the value Windows reads to decide that is
+hash-protected, precisely so that programs cannot claim a file type behind the
+reader's back. Choose `mark` once with "Always use this app" and the double
+click works from then on.
+
+The installer does not touch `PATH`. To keep using `mark file.md` from a
+terminal, add `%LOCALAPPDATA%\Programs\mark` to it, or carry on with the plain
+`mark-windows-x64.exe` from the same prerelease — a single file that needs no
+installation and nothing but Windows itself.
 
 ## Usage
 
@@ -202,6 +223,12 @@ would. If that matters for a given file, it is worth knowing before opening it.
 | [`serde_json`](https://crates.io/crates/serde_json) | Messages between the page and Rust |
 | [`open`](https://crates.io/crates/open) | Handing links to the desktop |
 | [`anyhow`](https://crates.io/crates/anyhow) | Error reporting |
+
+And one build dependency, on Windows only, linked into nothing:
+
+| Crate | Why |
+| --- | --- |
+| [`winresource`](https://crates.io/crates/winresource) | Compiles the icon into `mark.exe`, which cargo will not do on its own |
 
 Two fonts are bundled as well, both under the SIL Open Font Licence 1.1:
 [Inter](https://github.com/rsms/inter) and

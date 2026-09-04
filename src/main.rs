@@ -669,4 +669,72 @@ mod tests {
             "an unreplaced placeholder is still there"
         );
     }
+
+    /// The extensions the Windows installer registers, read back out of the
+    /// script. Nothing else in the build looks at that file from a machine that
+    /// can run the tests.
+    fn registered_extensions() -> Vec<String> {
+        include_str!("../windows/mark.iss")
+            .lines()
+            .filter_map(|line| line.split("Software\\Classes\\.").nth(1))
+            .filter_map(|rest| rest.split('\\').next())
+            .map(|ext| ext.to_owned())
+            .collect()
+    }
+
+    /// The installer claims a file type on behalf of a program that would then
+    /// refuse to open it -- a document in the "Open with" menu that greets the
+    /// reader with an error.
+    #[test]
+    fn every_registered_extension_is_one_mark_opens() {
+        let registered = registered_extensions();
+        assert!(!registered.is_empty(), "the .iss registers nothing at all");
+
+        for ext in registered {
+            assert!(
+                MARKDOWN_EXTENSIONS.contains(&ext.as_str()),
+                ".{ext} is registered but mark refuses to open it"
+            );
+        }
+    }
+
+    /// The other direction is deliberately not an equality: mark opens .txt, and
+    /// putting a Markdown viewer in the "Open with" menu of every text file on
+    /// the machine is not a thing it gets to do.
+    #[test]
+    fn plain_text_is_not_claimed() {
+        assert!(
+            !registered_extensions().iter().any(|ext| ext == "txt"),
+            "the installer claims .txt"
+        );
+    }
+
+    /// Windows picks the entry closest to the size it wants and scales whatever
+    /// it finds, so a missing 16 is not an error anywhere -- it is a blurry
+    /// icon in the taskbar, on a machine none of this is built on.
+    #[test]
+    fn the_icon_carries_every_size_windows_asks_for() {
+        const ICON: &[u8] = include_bytes!("../assets/mark.ico");
+        const WANTED: [u32; 7] = [256, 128, 64, 48, 32, 24, 16];
+
+        assert_eq!(&ICON[0..4], &[0, 0, 1, 0], "not an .ico");
+
+        let count = u16::from_le_bytes([ICON[4], ICON[5]]) as usize;
+        let sizes: Vec<u32> = (0..count)
+            .map(|n| {
+                // Each directory entry is 16 bytes, and its width byte holds 0
+                // for 256 -- the field is a single byte and 256 does not fit.
+                let width = ICON[6 + n * 16];
+                if width == 0 {
+                    256
+                } else {
+                    u32::from(width)
+                }
+            })
+            .collect();
+
+        for wanted in WANTED {
+            assert!(sizes.contains(&wanted), "the icon has no {wanted} px entry");
+        }
+    }
 }

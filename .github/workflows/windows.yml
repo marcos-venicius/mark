@@ -75,6 +75,9 @@ jobs:
             exit 1
           }
           Write-Output $version
+          # The installer needs the same string, and this is the copy that has
+          # just been proved to match what the binary reports.
+          "MARK_VERSION=$($version -replace '^mark ', '')" >> $env:GITHUB_ENV
 
       # crt-static above and the static WebView2 loader are both invisible until
       # someone runs the .exe on a machine missing the file -- and this runner is
@@ -108,6 +111,39 @@ jobs:
           }
           Write-Output "Windows GUI subsystem."
 
+          # build.rs downgrades a failed resource compile to a warning, on the
+          # grounds that an .exe with no icon still runs. That leaves this as
+          # the only place the icon is ever checked -- and an installer whose
+          # shortcut and file association both point at a blank page is worse
+          # than a failed build.
+          Add-Type -AssemblyName System.Drawing
+          $icon = [System.Drawing.Icon]::ExtractAssociatedIcon(
+            (Resolve-Path mark-windows-x64.exe))
+          if (-not $icon) {
+            Write-Error "The binary carries no icon resource."
+            exit 1
+          }
+          Write-Output "Icon embedded."
+
+      # Inno Setup 6 is part of the windows-latest image, so there is nothing to
+      # install -- but if that ever changes this has to fail rather than warn
+      # the way the dumpbin step does. A missing dumpbin costs a check; a
+      # missing ISCC costs the artefact.
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Error "Inno Setup is not on this runner: $iscc"
+            exit 1
+          }
+          & $iscc /DMarkVersion=$env:MARK_VERSION windows\mark.iss
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ISCC exited with $LASTEXITCODE"
+            exit 1
+          }
+          Copy-Item windows/Output/mark-setup-x64.exe mark-setup-x64.exe
+
       # Delete and recreate rather than upload over the top: --cleanup-tag moves
       # the tag to this commit, so "latest" points at what it actually contains.
       # bash, not pwsh: "|| true" on a first run where the release does not exist
@@ -118,7 +154,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest mark-windows-x64.exe \
+          gh release create latest mark-windows-x64.exe mark-setup-x64.exe \
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "Latest build from main" \
