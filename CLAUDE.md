@@ -145,6 +145,10 @@ see Ground rules.
 
 ## Out of scope, on purpose
 
-Mermaid diagrams, LaTeX, a headless `--pdf`, a `.desktop` entry, tabs. None of these
-were forgotten; each was measured and deferred, and `FUTURE.md` records the reasoning.
-Proposing one means picking that note back up, not starting from scratch.
+Mermaid diagrams, LaTeX, a headless `--pdf`, tabs. None of these were forgotten; each
+was measured and deferred, and `FUTURE.md` records the reasoning. Proposing one means
+picking that note back up, not starting from scratch.
+
+The exception is the first note in `FUTURE.md`, opening a document by double-clicking
+it -- a `.desktop` entry on Linux and a file association on Windows. That one is queued
+rather than deferred: it is what the person you are working for wants next.
