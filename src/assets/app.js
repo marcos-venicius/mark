@@ -17,7 +17,11 @@
   var ZOOM_STEPS = [0.75, 0.85, 0.92, 1, 1.1, 1.25, 1.4, 1.6, 1.85];
   var zoom = 3;
 
-  var tocEnabled = true;
+  // The reader's answer about the sidebar, and null until they give one. With
+  // no answer the sidebar follows the document: one or two headings is not
+  // something you need a map for, so it stays away. Pressing the key is an
+  // answer, and it outranks that either way.
+  var tocChoice = null;
   var spy = null;
 
   // Every ```mermaid fence is drawn once per palette. The colours mermaid uses
@@ -253,8 +257,8 @@
     tocList.textContent = "";
 
     var headings = content.querySelectorAll("h1[id], h2[id], h3[id], h4[id]");
-    // One or two headings is not a document you need a map for.
-    if (headings.length < 3) {
+    // A document with no heading at all has nothing to list, whoever asks.
+    if (headings.length === 0) {
       toc.hidden = true;
       return;
     }
@@ -267,7 +271,7 @@
       tocList.appendChild(link);
     });
 
-    toc.hidden = !tocEnabled;
+    toc.hidden = tocChoice === null ? headings.length < 3 : !tocChoice;
     watchHeadings(headings);
   }
 
@@ -324,8 +328,10 @@
   }
 
   function toggleToc() {
-    tocEnabled = !tocEnabled;
-    toc.hidden = !tocEnabled || tocList.childElementCount === 0;
+    // What the key answers is whatever is on screen now, which for a short
+    // document is the rule above rather than an earlier press.
+    tocChoice = toc.hidden;
+    toc.hidden = !tocChoice || tocList.childElementCount === 0;
   }
 
   // ------------------------------------------------------------------ links
