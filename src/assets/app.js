@@ -9,6 +9,9 @@
   var tocList = document.getElementById("toc-list");
   var find = document.getElementById("find");
   var findInput = document.getElementById("find-input");
+  var help = document.getElementById("help");
+  var helpCard = document.getElementById("help-card");
+  var helpClose = document.getElementById("help-close");
 
   var BASE_FONT_SIZE = 16.5;
   var ZOOM_STEPS = [0.75, 0.85, 0.92, 1, 1.1, 1.25, 1.4, 1.6, 1.85];
@@ -233,6 +236,35 @@
   });
   document.getElementById("find-close").addEventListener("click", closeFind);
 
+  // ------------------------------------------------------------ help panel
+
+  // Rust filled the panel in before the page loaded, so there is nothing to
+  // build here -- only the same hidden/shown dance the find bar does.
+  function openHelp() {
+    help.hidden = false;
+    // The card, not the close button: a focus ring drawn on a button nobody
+    // pressed looks like a stray box in the corner.
+    helpCard.focus();
+  }
+
+  function closeHelp() {
+    help.hidden = true;
+    page.focus();
+  }
+
+  function toggleHelp() {
+    if (help.hidden) openHelp();
+    else closeHelp();
+  }
+
+  document.getElementById("help-open").addEventListener("click", toggleHelp);
+  helpClose.addEventListener("click", closeHelp);
+
+  // A click on the dimmed area around the card, which is the panel itself.
+  help.addEventListener("click", function (event) {
+    if (event.target === help) closeHelp();
+  });
+
   // ------------------------------------------------------------------- zoom
 
   function setZoom(step) {
@@ -249,8 +281,26 @@
 
     if (key === "Escape") {
       event.preventDefault();
-      if (!find.hidden) closeFind();
+      if (!help.hidden) closeHelp();
+      else if (!find.hidden) closeFind();
       else send({ type: "quit" });
+      return;
+    }
+
+    // F1 before the Ctrl block, because it is a key of its own and Windows
+    // readers reach for it first.
+    if (key === "F1") {
+      event.preventDefault();
+      return toggleHelp();
+    }
+
+    // The panel is modal: behind it, a t or a d would be an invisible action on
+    // a document nobody can see. Only the keys that close it get through.
+    if (!help.hidden) {
+      if (key === "?") {
+        event.preventDefault();
+        closeHelp();
+      }
       return;
     }
 
@@ -295,6 +345,10 @@
     if (key === "/") {
       event.preventDefault();
       return openFind();
+    }
+    if (key === "?") {
+      event.preventDefault();
+      return openHelp();
     }
     if (key === "t") {
       event.preventDefault();

@@ -26,9 +26,11 @@ use wry::{WebView, WebViewBuilder};
 use render::Renderer;
 use watcher::FileWatcher;
 
-const USAGE: &str = "\
-mark -- a Markdown viewer
+const BANNER: &str = "mark -- a Markdown viewer";
 
+/// The command line, as a terminal sees it. The shortcuts are not part of it:
+/// they live in `SHORTCUTS`, because the window has to show the same list.
+const INVOCATION: &str = "\
 Usage:
   mark <file>       Open a Markdown file in a window
   mark --help       Show this message
@@ -36,18 +38,31 @@ Usage:
 
 Options:
   -f, --foreground  Keep hold of the terminal instead of detaching from it
-
-Shortcuts (inside the window):
-  Ctrl +/-/0        Zoom in, out, reset
-  /                 Find in page
-  t                 Toggle the table of contents
-  d                 Switch between light and dark
-  Shift D           Go back to following the system
-  Alt Left/Right    Go back and forward between documents
-  Ctrl P            Print, or save as PDF
-  Ctrl R            Reload from disk
-  Ctrl Q            Quit
 ";
+
+/// Every shortcut, written down once. `usage` lays them out for a terminal and
+/// `help_html` for the window, so one added here reaches both -- and the window
+/// is the only help most readers on Windows will ever see, where a document
+/// opened from Explorer never passes a prompt.
+///
+/// The keys are read a token at a time, `or` joining two ways of doing the same
+/// thing. Whatever is written here has to survive both a monospaced column and a
+/// row of `<kbd>` boxes.
+const SHORTCUTS: &[(&str, &str)] = &[
+    ("Ctrl +/-/0", "Zoom in, out, reset"),
+    ("Ctrl scroll", "Zoom"),
+    ("/ or Ctrl F", "Find in page"),
+    ("Enter or Shift Enter", "Next, previous match"),
+    ("t", "Toggle the table of contents"),
+    ("d", "Switch between light and dark"),
+    ("Shift D", "Go back to following the system"),
+    ("Alt Left/Right", "Go back and forward between documents"),
+    ("Home or End", "Top, bottom"),
+    ("Ctrl P", "Print, or save as PDF"),
+    ("Ctrl R", "Reload from disk"),
+    ("? or F1", "Show this help"),
+    ("Ctrl Q or Esc", "Quit"),
+];
 
 /// File types `mark` opens itself. Anything else is handed to the desktop.
 const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mkdn", "mdx", "txt"];
@@ -150,7 +165,7 @@ fn parse_args() -> Result<Option<Invocation>> {
     for argument in std::env::args_os().skip(1) {
         match argument.to_str() {
             Some("-h" | "--help") => {
-                print_out(USAGE);
+                print_out(&usage());
                 return Ok(None);
             }
             Some("-V" | "--version") => {
@@ -169,7 +184,7 @@ fn parse_args() -> Result<Option<Invocation>> {
     let Some(file) = file else {
         // Being called with no file is a mistake, not a request for help, so the
         // usage goes to stderr and the exit code says so.
-        print_err(USAGE);
+        print_err(&usage());
         std::process::exit(2);
     };
 
@@ -504,12 +519,70 @@ fn decode_message(body: &str) -> Option<UserEvent> {
     }
 }
 
-/// The page, with the syntax palette and asset URLs filled in.
+/// The whole of `--help`, in a column wide enough for the longest set of keys.
+fn usage() -> String {
+    let width = SHORTCUTS
+        .iter()
+        .map(|(keys, _)| keys.len())
+        .max()
+        .unwrap_or(0);
+    let mut text = format!("{BANNER}\n\n{INVOCATION}\nShortcuts (inside the window):\n");
+    for (keys, what) in SHORTCUTS {
+        text.push_str(&format!("  {keys:width$}  {what}\n"));
+    }
+    text
+}
+
+/// The same thing again for the panel inside the window, which is where the help
+/// is actually read. The usage block is the terminal's text verbatim; only the
+/// shortcuts are laid out differently, as keys rather than as a column.
+fn help_html() -> String {
+    let mut html = format!(
+        "<h2 id=\"help-title\">mark {}</h2>\
+         <p class=\"help-heading\">Shortcuts</p>\
+         <div class=\"help-rows\">",
+        env!("CARGO_PKG_VERSION"),
+    );
+    for (keys, what) in SHORTCUTS {
+        html.push_str(&format!(
+            "<div class=\"help-keys\">{}</div><div>{}</div>",
+            keys_html(keys),
+            escape(what),
+        ));
+    }
+    // The command line comes second and may well be scrolled past: inside the
+    // window the document is already open, and the keys are what is being
+    // looked for.
+    html.push_str(&format!(
+        "</div>\
+         <p class=\"help-heading\">Usage</p>\
+         <pre class=\"help-usage\">{}</pre>",
+        escape(INVOCATION.trim_end()),
+    ));
+    html
+}
+
+/// One `<kbd>` per key. `or` is prose rather than a key, and stays as it is.
+fn keys_html(keys: &str) -> String {
+    keys.split(' ')
+        .map(|token| {
+            if token == "or" {
+                token.to_string()
+            } else {
+                format!("<kbd>{}</kbd>", escape(token))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The page, with the syntax palette, the asset URLs and the help filled in.
 fn build_shell() -> String {
     include_str!("assets/shell.html")
         .replace("/*{{SYNTAX_CSS}}*/", &Renderer::syntax_css())
         .replace("{{STYLE_URL}}", &protocol::url("/__mark__/style.css"))
         .replace("{{APP_URL}}", &protocol::url("/__mark__/app.js"))
+        .replace("{{HELP}}", &help_html())
 }
 
 /// Shown in place of the document when the file cannot be read -- during a save,
@@ -556,5 +629,44 @@ fn absolute(path: &Path) -> PathBuf {
     match std::env::current_dir() {
         Ok(cwd) => protocol::resolve(&cwd, &path.to_string_lossy()),
         Err(_) => path.to_path_buf(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The two renderings of the shortcut table drift apart the moment one of
+    /// them is written by hand, and the window is the copy nobody can check from
+    /// a terminal.
+    #[test]
+    fn every_shortcut_reaches_both_the_terminal_and_the_window() {
+        let usage = usage();
+        let shell = build_shell();
+
+        for (keys, what) in SHORTCUTS {
+            assert!(usage.contains(keys), "{keys} is missing from --help");
+            assert!(usage.contains(what), "'{what}' is missing from --help");
+            assert!(
+                shell.contains(what),
+                "'{what}' is missing from the help panel"
+            );
+
+            for key in keys.split(' ').filter(|token| *token != "or") {
+                let boxed = format!("<kbd>{key}</kbd>");
+                assert!(shell.contains(&boxed), "{key} is not a key in the panel");
+            }
+        }
+    }
+
+    /// A placeholder left behind is a hole in the page that only shows up on
+    /// screen, since the shell is otherwise valid HTML either way.
+    #[test]
+    fn the_shell_has_nothing_left_to_fill_in() {
+        let shell = build_shell();
+        assert!(
+            !shell.contains("{{"),
+            "an unreplaced placeholder is still there"
+        );
     }
 }

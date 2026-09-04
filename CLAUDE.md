@@ -45,12 +45,17 @@ Rust pushing on a timer, which removes the race with the webview loading.
 
 Shared state is one thing: `DocDir = Arc<Mutex<PathBuf>>` (`src/render.rs:15`), the
 directory of the document on screen. The URL rewriter and the protocol handler both read
-it; `App::navigated` (`src/main.rs:408`) swaps it when the reader follows a link.
+it; `App::navigated` (`src/main.rs:430`) swaps it when the reader follows a link.
 
 The Rust/page boundary is one channel each way — `evaluate_script` down, and
-`decode_message` (`src/main.rs:486`) over `{"type": ...}` JSON up. Page behaviour that
-needs the filesystem becomes a variant of `enum UserEvent` (`src/main.rs:56`) and a case
-in `decode_message`. Nothing else crosses.
+`decode_message` (`src/main.rs:508`) over `{"type": ...}` JSON up. Page behaviour that
+needs the filesystem becomes a variant of `enum UserEvent` (`src/main.rs:72`) and a case
+in `decode_message`. Nothing else crosses while the window is open.
+
+Before it opens there is one more path: `build_shell` (`src/main.rs:580`) fills the
+placeholders in `shell.html` once — the asset URLs, the syntax palette, and the help
+panel that `help_html` builds from `SHORTCUTS` (`src/main.rs:51`). Markup that never
+changes belongs there rather than in a `setContent` call.
 
 ## Invariants
 
@@ -58,12 +63,12 @@ Each of these is load-bearing. The comment above it says the same thing at more 
 
 | Invariant | Where | If ignored |
 | --- | --- | --- |
-| Fork before any thread starts or anything touches GTK | `src/main.rs:195` | the child holds locks nothing will release |
+| Fork before any thread starts or anything touches GTK | `src/main.rs:211` | the child holds locks nothing will release |
 | Relative URLs become absolute at render time, raw HTML included | `src/render.rs:66`, `:245` | the webview flattens `../` and the image is never found |
-| Attach the webview through the GTK vbox, not a raw handle | `src/main.rs:463` | wry refuses a native Wayland session outright |
+| Attach the webview through the GTK vbox, not a raw handle | `src/main.rs:485` | wry refuses a native Wayland session outright |
 | Keep `Access` and `Modify(Metadata)` out of the watcher | `src/watcher.rs:57` | rendering opens the file, which is reported as a change, forever |
 | Scope both palettes; `@media print` comes last | `src/render.rs:114` | one stray token in one language; a printout in pale colours |
-| Fill in only the standard handles Windows left empty | `src/main.rs:286` | `mark --version > out.txt` prints to the console and leaves the file empty |
+| Fill in only the standard handles Windows left empty | `src/main.rs:308` | `mark --version > out.txt` prints to the console and leaves the file empty |
 
 Two more are there because `render.unsafe = true` lets documents bring their own HTML: the
 Content Security Policy in `src/assets/shell.html` (`default-src 'none'`,
@@ -77,7 +82,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 23 tests: 16 in render.rs, 7 in protocol.rs
+cargo test          # 25 tests: 16 in render.rs, 7 in protocol.rs, 2 in main.rs
 cargo clippy
 cargo run -- README.md
 ./install.sh        # release build, then install into $PREFIX/bin (default ~/.local)
@@ -97,7 +102,8 @@ Things written down nowhere else:
   `rustup target add x86_64-pc-windows-msvc` and then `cargo check` on a scratch crate
   holding the same code. The full crate does not cross-check -- `onig_sys` compiles C.
 - Tests live inline in `#[cfg(test)] mod tests`. There is no `tests/` directory, and
-  `main.rs` and `watcher.rs` have none.
+  `watcher.rs` has none. The two in `main.rs` guard the shortcut table: it is the one
+  thing rendered twice, and the window's copy cannot be checked from a terminal.
 - Building on Linux needs `libwebkit2gtk-4.1-dev` and `libsoup-3.0-dev`; Rust 1.85 or newer.
 
 ## Style
@@ -129,7 +135,7 @@ see Ground rules.
 
 | Task | Files |
 | --- | --- |
-| A new keyboard shortcut | `src/assets/app.js` keydown -> `UserEvent` and `decode_message` in `src/main.rs` -> `USAGE` -> the README table |
+| A new keyboard shortcut | `SHORTCUTS` in `src/main.rs` (the terminal text and the help panel both follow) -> `src/assets/app.js` keydown -> `UserEvent` and `decode_message` in `src/main.rs`, if it needs the filesystem -> the README table |
 | A new servable file type | `SERVABLE` in `src/protocol.rs` — a security decision |
 | A new comrak extension | `Renderer::new` in `src/render.rs`, styling in `src/assets/style.css`, plus a test |
 | Colours or typography | `src/assets/style.css`, both copies of the dark palette |

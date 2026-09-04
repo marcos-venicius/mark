@@ -53,6 +53,7 @@
   --accent: #1f6feb;
   --shadow: 0 6px 24px rgba(20, 24, 31, 0.12);
   --selection: rgba(31, 111, 235, 0.18);
+  --backdrop: rgba(20, 24, 31, 0.34);
 
   --note: #1f6feb;
   --tip: #1a7f37;
@@ -90,6 +91,7 @@
     --accent: #6aa9ff;
     --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
     --selection: rgba(106, 169, 255, 0.26);
+    --backdrop: rgba(0, 0, 0, 0.62);
 
     --note: #6aa9ff;
     --tip: #4ac26b;
@@ -115,6 +117,7 @@
   --accent: #6aa9ff;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
   --selection: rgba(106, 169, 255, 0.26);
+  --backdrop: rgba(0, 0, 0, 0.62);
 
   --note: #6aa9ff;
   --tip: #4ac26b;
@@ -460,6 +463,126 @@ tbody tr:nth-child(even) { background: var(--surface); }
 }
 #find button:hover { background: var(--surface-strong); color: var(--text); }
 
+/* ------------------------------------------------------------ help panel */
+
+/* The only help a reader who never opens a terminal will see, so it holds the
+   whole of --help: the version, the command line, and the keys. */
+#help {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: var(--backdrop);
+}
+
+/* The display above is flex, which would otherwise outrank the hidden attribute
+   the way it does for the find bar. */
+#help[hidden] { display: none; }
+
+#help-card {
+  position: relative;
+  max-width: 37rem;
+  max-height: 86vh;
+  overflow-y: auto;
+  outline: 0;
+  padding: 1.4rem 1.7rem 1.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+#help-title {
+  margin: 0 0 0.95rem;
+  border: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.help-heading {
+  margin: 0 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* The terminal's own text, so it keeps the column it was written in -- except
+   that the longest option line is wider than a panel has any business being, and
+   a sideways scrollbar inside something already scrolling is a poor trade. */
+.help-usage {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  overflow-x: hidden;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.help-rows {
+  display: grid;
+  margin: 0 0 1.5rem;
+  grid-template-columns: max-content 1fr;
+  gap: 0.34rem 1.3rem;
+  align-items: baseline;
+  font-size: 0.83rem;
+}
+
+.help-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+#help-close {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+#help-close:hover { background: var(--surface-strong); color: var(--text); }
+
+/* Discreet enough to forget about, present enough to be found. It sits below the
+   find bar and below the panel it opens. */
+#help-open {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.25rem;
+  z-index: 9;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0.5;
+  cursor: pointer;
+}
+#help-open:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+  opacity: 1;
+}
+
 /* ------------------------------------------------------------------ error */
 
 .error { color: var(--caution); }
@@ -501,6 +624,7 @@ tbody tr:nth-child(even) { background: var(--surface); }
     --accent: #0b4fc4;
     --shadow: none;
     --selection: transparent;
+    --backdrop: transparent;
 
     --note: #0b4fc4;
     --tip: #0f6b2b;
@@ -523,6 +647,8 @@ tbody tr:nth-child(even) { background: var(--surface); }
 
   #toc,
   #find,
+  #help,
+  #help-open,
   a.anchor { display: none !important; }
 
   #page { overflow: visible; }

@@ -38,6 +38,20 @@
     <button id="find-close" type="button" title="Close (Esc)" aria-label="Close">&#10005;</button>
   </div>
 
+  <!-- The panel is built in Rust, from the table --help prints from, and dropped
+       in here at startup. Not a <dialog>: its own Escape handling would fight the
+       one in app.js, and hidden + CSS is how the find bar already works. -->
+  <div id="help" hidden>
+    <div id="help-card" role="dialog" aria-modal="true" aria-labelledby="help-title" tabindex="-1">
+      <button id="help-close" type="button" title="Close (Esc)" aria-label="Close">&#10005;</button>
+      {{HELP}}
+    </div>
+  </div>
+
+  <!-- The only visible affordance in the window. Without it, a reader who never
+       runs mark from a terminal has no way of learning that the keys exist. -->
+  <button id="help-open" type="button" title="Help (?)" aria-label="Help">?</button>
+
   <script src="{{APP_URL}}"></script>
 </body>
 </html>

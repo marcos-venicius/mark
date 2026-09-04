@@ -71,6 +71,11 @@ comes back before the text does, and `%ERRORLEVEL%` is not the program's, so a
 script that needs the exit code wants `start /wait mark --version`.
 `--foreground` is accepted and does nothing there.
 
+The same help is inside the window: <kbd>?</kbd> or <kbd>F1</kbd> opens a panel
+with the version, the command line and every shortcut, and there is a small `?`
+in the corner for anyone who has not read this far. On Windows that panel is the
+practical way to see it — a document opened from Explorer never passes a prompt.
+
 ## What it renders
 
 - **GitHub Flavored Markdown** — tables, task lists, strikethrough, autolinks,
@@ -115,6 +120,7 @@ script that needs the exit code wants `start /wait mark --version`.
 | <kbd>Home</kbd> / <kbd>End</kbd> | Top, bottom |
 | <kbd>Ctrl</kbd> <kbd>P</kbd> | Print, or save as PDF |
 | <kbd>Ctrl</kbd> <kbd>R</kbd> | Reload from disk |
+| <kbd>?</kbd> or <kbd>F1</kbd> | Show the help panel |
 | <kbd>Ctrl</kbd> <kbd>Q</kbd> or <kbd>Esc</kbd> | Quit |
 
 ## How it works
@@ -145,6 +151,11 @@ language, which is exactly the sort of thing nobody notices for months.
 The fork that detaches from the terminal happens before anything starts a thread
 or touches GTK. Forking past either leaves the child holding locks that nothing
 will ever release, so the order is not incidental.
+
+The shortcut list is written down once, as a table in `main.rs`. `--help` lays it
+out as a column of text and the help panel as rows of keys, so a shortcut added
+in one place cannot be missing from the other — which matters most on Windows,
+where the panel is the only copy a reader is likely to see.
 
 Windows has no fork, and a console application cannot give its console back. The
 equivalent is being a GUI program from the start, which is what the binary is —
