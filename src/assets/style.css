@@ -418,6 +418,39 @@ pre[data-lang]::before {
   font-size: 0.85rem;
 }
 
+/* ------------------------------------------------------------------ maths */
+
+/* A formula is the same drawing in both palettes: KaTeX lays it out as HTML and
+   leaves the colour to currentColor, so nothing here is swapped the way a
+   diagram is and nothing has to be redrawn when the reader presses d. What is
+   left is where a formula sits. */
+
+/* `$$...$$` arrives as a <span>, because that is what it is in the paragraph the
+   dollars were written in. On the page it is a block. */
+[data-math-style="display"] { display: block; }
+
+/* The ```math fence, whose source stays behind it hidden. */
+.math-block { margin: 1.6em 0; }
+
+/* An equation wider than the column scrolls on its own rather than stretching
+   it, which is what .table-wrap does for a wide table. The padding is for the
+   descenders and the integral signs a tight box would clip. */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.2em 0;
+}
+
+/* Said at the top of the document when the renderer itself could not be loaded,
+   which leaves every formula in it as the TeX it was written as. A formula that
+   merely will not parse is KaTeX's own business -- it colours that one in place,
+   with the errorColor app.js hands it. */
+.math-error {
+  margin: 0 0 1.5em;
+  color: var(--caution);
+  font-size: 0.85rem;
+}
+
 /* ----------------------------------------------------------------- tables */
 
 .table-wrap { margin: 1.5em 0; overflow-x: auto; }
@@ -735,6 +768,8 @@ tbody tr:nth-child(even) { background: var(--surface); }
   table,
   img,
   .diagram,
+  .math-block,
+  .katex-display,
   .markdown-alert { break-inside: avoid; }
 
   /* A diagram is a picture of the palette it was drawn in, so the dark one is
@@ -757,7 +792,8 @@ tbody tr:nth-child(even) { background: var(--surface); }
     word-break: break-word;
   }
 
-  .table-wrap { overflow-x: visible; }
+  .table-wrap,
+  .katex-display { overflow-x: visible; }
 
   /* A link nobody can click is worth the address behind it -- but only when that
      address leads somewhere the reader can go. Relative links point at files

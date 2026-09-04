@@ -35,10 +35,12 @@
   ];
   var mermaidLoading = null;
   var diagrams = 0;
+  var katexLoading = null;
 
-  // Which document is on screen. A save part way through drawing a diagram
-  // replaces the page under it, and the drawing that finishes afterwards must
-  // not write into a DOM that has already been thrown away.
+  // Which document is on screen. A save part way through drawing a diagram or
+  // typesetting a formula replaces the page under it, and the work that
+  // finishes afterwards must not write into a DOM that has already been thrown
+  // away.
   var generation = 0;
 
   var THEME_KEY = "mark.theme";
@@ -100,11 +102,11 @@
       labelCodeBlocks();
       wrapTables();
       buildToc();
-      // Diagrams change the height of everything below them, so the scroll is
-      // restored after they have settled rather than before. A document with no
-      // fence to draw resolves immediately and lands in the same frame it
-      // always did.
-      drawDiagrams(mine).then(function () {
+      // Diagrams and formulas both change the height of everything below them,
+      // so the scroll is restored after they have settled rather than before. A
+      // document with neither in it resolves immediately and lands in the same
+      // frame it always did.
+      Promise.all([drawDiagrams(mine), typesetMath(mine)]).then(function () {
         if (mine !== generation) return;
         // Images and fonts settle a frame later; restoring after that keeps a
         // save from nudging the reader off the paragraph they were on.
@@ -238,16 +240,125 @@
   function loadMermaid() {
     if (mermaidLoading) return mermaidLoading;
 
-    mermaidLoading = new Promise(function (resolve, reject) {
-      var script = document.createElement("script");
-      script.src = "/__mark__/mermaid.min.js";
-      script.onload = resolve;
-      script.onerror = function () {
-        reject(new Error("the diagram renderer could not be loaded"));
-      };
-      document.head.appendChild(script);
+    var script = document.createElement("script");
+    script.src = "/__mark__/mermaid.min.js";
+
+    mermaidLoading = arrival(script).catch(function () {
+      throw new Error("the diagram renderer could not be loaded");
     });
     return mermaidLoading;
+  }
+
+  // A tag that fetches something, as a promise of it having arrived. Adding it
+  // to the page is part of the same step, so that nothing can be waited on
+  // before it has actually been asked for. Both renderers below are loaded
+  // through this.
+  function arrival(element) {
+    return new Promise(function (resolve, reject) {
+      element.onload = resolve;
+      element.onerror = reject;
+      document.head.appendChild(element);
+    });
+  }
+
+  // ------------------------------------------------------------------ maths
+
+  // Nothing here runs for a document without maths in it, which is nearly all of
+  // them. Unlike a diagram a formula is the same drawing in both palettes --
+  // KaTeX lays it out in HTML and leaves the colour to currentColor -- so there
+  // is no second pass here, and pressing d costs nothing.
+  function typesetMath(mine) {
+    var nodes = [];
+    content.querySelectorAll("[data-math-style]").forEach(function (node) {
+      nodes.push(node);
+    });
+    if (nodes.length === 0) return Promise.resolve();
+
+    return loadKatex()
+      .then(function () {
+        if (mine !== generation) return null;
+        nodes.forEach(typesetOne);
+        // The faces KaTeX draws with are fetched only once a formula is on the
+        // page, and every line below one moves again when they land.
+        return document.fonts.ready;
+      })
+      .catch(function (error) {
+        // Only the renderer failing to load reaches here; a formula whose TeX
+        // will not parse is KaTeX's own business, and it writes that one out in
+        // red where it stands. Either way the source someone wrote is still on
+        // the page, so all this adds is the reason -- once, at the top, because
+        // what failed is the renderer and not any one formula.
+        if (mine !== generation) return;
+        noteMathFailure(error);
+      });
+  }
+
+  function typesetOne(node) {
+    // The two dollar forms mark the node holding the source itself; the ```math
+    // fence marks the <code> inside a <pre>, and that one keeps the shape a
+    // diagram has -- the source stays in the page, hidden, with the drawing in
+    // front of it.
+    var pre = null;
+    var target = node;
+
+    if (node.tagName === "CODE" && node.parentNode.tagName === "PRE") pre = node.parentNode;
+
+    if (pre) {
+      target = document.createElement("div");
+      target.className = "math-block";
+      pre.parentNode.insertBefore(target, pre);
+    }
+
+    try {
+      katex.render(node.textContent, target, {
+        displayMode: node.getAttribute("data-math-style") === "display",
+        // A document is not trusted with the commands that reach outside the
+        // formula: \href, \url and \includegraphics. This is KaTeX's half of
+        // the decision securityLevel: "strict" is for mermaid.
+        trust: false,
+        // A formula that will not parse is written out where it stands rather
+        // than thrown, which is the same answer keepSource gives a fence mermaid
+        // refused. KaTeX puts this straight into a style attribute, so naming
+        // the custom property here keeps the colour itself in the stylesheet
+        // with every other one, and keeps it right in both palettes.
+        throwOnError: false,
+        errorColor: "var(--caution)",
+      });
+      if (pre) pre.hidden = true;
+    } catch (error) {
+      // Only what KaTeX will not swallow itself lands here. The source is left
+      // exactly where it was.
+      if (pre) target.parentNode.removeChild(target);
+      noteMathFailure(error);
+    }
+  }
+
+  function noteMathFailure(error) {
+    if (content.querySelector(".math-error")) return;
+    var note = document.createElement("p");
+    note.className = "math-error";
+    note.textContent = "Maths: " + ((error && error.message) || String(error));
+    content.insertBefore(note, content.firstChild);
+  }
+
+  // Both halves before anything is typeset: KaTeX lays a formula out as HTML and
+  // the stylesheet is what gives that HTML its sizes, so a formula drawn before
+  // the <link> lands is a heap of overlapping letters. The URLs are relative for
+  // the reason the diagram renderer's is.
+  function loadKatex() {
+    if (katexLoading) return katexLoading;
+
+    var script = document.createElement("script");
+    script.src = "/__mark__/katex.min.js";
+
+    var style = document.createElement("link");
+    style.rel = "stylesheet";
+    style.href = "/__mark__/katex.min.css";
+
+    katexLoading = Promise.all([arrival(script), arrival(style)]).catch(function () {
+      throw new Error("the formula renderer could not be loaded");
+    });
+    return katexLoading;
   }
 
   // ---------------------------------------------------------------- sidebar

@@ -1,6 +1,6 @@
 # Examples
 
-Five documents, each one exercising a part of `mark`. Open the first and follow
+Six documents, each one exercising a part of `mark`. Open the first and follow
 the links; <kbd>Alt</kbd> <kbd>←</kbd> comes back.
 
 ```sh
@@ -11,6 +11,7 @@ cargo run -- examples/README.md
   a document is allowed to bring with it.
 - [Code](code.md) — syntax highlighting, one block per language.
 - [Diagrams](diagrams.md) — ```` ```mermaid ```` fences, in both palettes.
+- [Maths](maths.md) — `$...$`, `$$...$$` and a ```` ```math ```` fence.
 - [Images](images.md) — local files, including ones a directory up.
 - [Links](links.md) — where each kind of link goes, and what does not open here.
 

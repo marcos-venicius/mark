@@ -85,10 +85,11 @@ erDiagram
 
 ```mermaid
 pie showData
-  title What the 4.3 MB binary is made of
-  "mermaid" : 3500
-  "the program" : 600
-  "fonts" : 190
+  title What the 4.6 MB binary is made of, in KB
+  "the program" : 3190
+  "mermaid, in gzip" : 976
+  "KaTeX and its faces" : 400
+  "the two text fonts" : 190
 ```
 
 ## Gantt

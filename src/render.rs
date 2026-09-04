@@ -52,6 +52,15 @@ impl Renderer {
         ext.description_lists = true;
         ext.superscript = true;
         ext.alerts = true;
+        // Maths, in the four ways it is usually written: `$x$`, `$$x$$`,
+        // `` $`x`$ `` and a ```math fence. The dollar rules are stricter than
+        // they look -- the opening `$` cannot be followed by a space, the
+        // closing one cannot be preceded by one, and code spans are read before
+        // any of this -- so a paragraph about costing $5 or $10 is still prose.
+        // Neither of these renders anything on its own: they mark the maths with
+        // a `data-math-style` attribute, and app.js hands the source to KaTeX.
+        ext.math_dollars = true;
+        ext.math_code = true;
         // Documents that came from a static site generator start with a YAML
         // block that is metadata, not prose. Without this it renders as a stray
         // heading and a wall of key/value lines.
@@ -312,6 +321,55 @@ mod tests {
         let html = renderer().render("```mermaid\nflowchart LR\n  A --> B\n```\n");
         assert!(html.contains("class=\"language-mermaid\""), "{html}");
         assert!(html.contains("flowchart LR") && html.contains("A --&gt; B"), "{html}");
+    }
+
+    /// What app.js looks for. comrak renders every kind of maths as the same
+    /// attribute on a different tag, and the source arrives escaped, which is
+    /// why the page reads it back with `textContent`.
+    #[test]
+    fn maths_is_marked_up_for_the_page() {
+        let html = renderer().render("Let $x^2$ be, and $$e = mc^2$$ as well.\n");
+        assert!(
+            html.contains(r#"<span data-math-style="inline">x^2</span>"#),
+            "{html}"
+        );
+        assert!(
+            html.contains(r#"<span data-math-style="display">e = mc^2</span>"#),
+            "{html}"
+        );
+
+        let coded = renderer().render("Inline $`a < b`$ code.\n");
+        assert!(
+            coded.contains(r#"<code data-math-style="inline">a &lt; b</code>"#),
+            "{coded}"
+        );
+    }
+
+    /// The maths fence takes the path the mermaid one does not: comrak renders
+    /// it itself, so the highlighter never sees it and the source survives for
+    /// KaTeX to parse.
+    #[test]
+    fn a_maths_fence_keeps_its_source_for_the_page() {
+        let html = renderer().render("```math\n\\frac{a}{b} < c\n```\n");
+        assert!(html.contains(r#"class="language-math""#), "{html}");
+        assert!(html.contains(r#"data-math-style="display""#), "{html}");
+        assert!(html.contains(r"\frac{a}{b} &lt; c"), "{html}");
+        assert!(!html.contains("class=\"hl-"), "{html}");
+    }
+
+    /// The rule readers will meet first, and the reason turning `math_dollars`
+    /// on does not rewrite every document that mentions a price: an opening `$`
+    /// followed by a space, or a closing one preceded by it, is a dollar sign.
+    #[test]
+    fn not_every_dollar_sign_is_maths() {
+        for prose in [
+            "It costs $5 or $10, depending.\n",
+            "Neither is this $ 4 $.\n",
+            "A shell `$HOME` and a bare $ sign.\n",
+        ] {
+            let html = renderer().render(prose);
+            assert!(!html.contains("data-math-style"), "{html}");
+        }
     }
 
     #[test]

@@ -23,17 +23,15 @@ the reader's own `mimeapps.list`. Both installers put `mark` in the "Open with"
 menu; the reader picks it once. Anything promising a working double click
 straight after installation is promising what the desktop will not do.
 
-## LaTeX formulas
-
-Render `$...$` and `$$...$$` as maths.
-
-comrak already has the parsing side: setting `extension.math_dollars` (and
-`math_code`) in `src/render.rs` emits the maths nodes. What is missing is KaTeX —
-its script plus its font files, around 2 MB embedded, served over `mark://` and
-run from `app.js` after each render. The route is the one mermaid took: a packed
-asset in `src/protocol.rs`, fetched by the page only when a document turns out to
-need it. Unlike mermaid it needs no second pass for the dark palette -- KaTeX
-draws in `currentColor`.
+LaTeX formulas were the third note and have shipped as well. KaTeX went the way
+mermaid did -- packed into the binary and fetched by the page only once a
+document turns out to have a formula -- and cost less than this file feared: 76 KB
+of script in gzip, its stylesheet, and the twenty `woff2` faces it draws with,
+about 360 KB in all rather than 2 MB, because the `woff` and `ttf` copies of every
+face are never asked for. It needs no second drawing per palette, as guessed. The
+one thing that did not turn up in the guess is that Markdown reads a line before
+KaTeX does: a line holding nothing but `=` or `-` underlines the line above it,
+so an equation with one in it belongs in a ```math fence.
 
 ## Smaller ideas
 

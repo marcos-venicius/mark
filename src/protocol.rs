@@ -27,6 +27,23 @@ const SERVABLE: &[&str] = &[
     "ttf", "otf", "mp4", "webm", "ogv", "mp3", "ogg", "wav", "flac", "m4a", "pdf",
 ];
 
+/// One entry in [`ASSETS`] for a KaTeX font.
+///
+/// The name carries the `fonts/` in front of it because that is what the
+/// stylesheet asks for: `katex.min.css` is served from `/__mark__/`, and the
+/// `url(fonts/KaTeX_Main-Regular.woff2)` in it resolves against that. Only the
+/// `woff2` faces are embedded -- every `@font-face` lists `woff2, woff, ttf` and
+/// the webview stops at the first format it understands.
+macro_rules! katex_font {
+    ($name:literal) => {
+        (
+            concat!("fonts/", $name),
+            "font/woff2",
+            include_bytes!(concat!("assets/katex/fonts/", $name)),
+        )
+    };
+}
+
 /// Files compiled into the executable, served under [`ASSET_PREFIX`].
 const ASSETS: &[(&str, &str, &[u8])] = &[
     (
@@ -59,6 +76,34 @@ const ASSETS: &[(&str, &str, &[u8])] = &[
         "font/woff2",
         include_bytes!("assets/fonts/jetbrains-mono-latin-ext.woff2"),
     ),
+    // KaTeX's own stylesheet and the faces it draws with. Unlike the script
+    // beside them these are stored as they are: a woff2 is compressed already,
+    // and 25 KB of CSS is not worth a second inflate.
+    (
+        "katex.min.css",
+        "text/css; charset=utf-8",
+        include_bytes!("assets/katex/katex.min.css"),
+    ),
+    katex_font!("KaTeX_AMS-Regular.woff2"),
+    katex_font!("KaTeX_Caligraphic-Bold.woff2"),
+    katex_font!("KaTeX_Caligraphic-Regular.woff2"),
+    katex_font!("KaTeX_Fraktur-Bold.woff2"),
+    katex_font!("KaTeX_Fraktur-Regular.woff2"),
+    katex_font!("KaTeX_Main-Bold.woff2"),
+    katex_font!("KaTeX_Main-BoldItalic.woff2"),
+    katex_font!("KaTeX_Main-Italic.woff2"),
+    katex_font!("KaTeX_Main-Regular.woff2"),
+    katex_font!("KaTeX_Math-BoldItalic.woff2"),
+    katex_font!("KaTeX_Math-Italic.woff2"),
+    katex_font!("KaTeX_SansSerif-Bold.woff2"),
+    katex_font!("KaTeX_SansSerif-Italic.woff2"),
+    katex_font!("KaTeX_SansSerif-Regular.woff2"),
+    katex_font!("KaTeX_Script-Regular.woff2"),
+    katex_font!("KaTeX_Size1-Regular.woff2"),
+    katex_font!("KaTeX_Size2-Regular.woff2"),
+    katex_font!("KaTeX_Size3-Regular.woff2"),
+    katex_font!("KaTeX_Size4-Regular.woff2"),
+    katex_font!("KaTeX_Typewriter-Regular.woff2"),
 ];
 
 /// Files compiled into the executable compressed, served under [`ASSET_PREFIX`]
@@ -66,13 +111,22 @@ const ASSETS: &[(&str, &str, &[u8])] = &[
 ///
 /// mermaid is 3.5 MB as it ships and 976 KB in gzip, which is the difference
 /// between a viewer that fits in memory twice over and one that carries a
-/// diagram renderer nobody asked for. Most documents have no fence to draw, so
-/// the cost is paid per process and only by the ones that do.
-const PACKED: &[(&str, &str, &[u8])] = &[(
-    "mermaid.min.js",
-    "text/javascript; charset=utf-8",
-    include_bytes!("assets/mermaid/mermaid.min.js.gz"),
-)];
+/// diagram renderer nobody asked for. KaTeX is smaller -- 272 KB against 76 KB
+/// -- and is here for the same reason: most documents have no fence to draw and
+/// no formula to typeset, so the cost is paid per process and only by the ones
+/// that do.
+const PACKED: &[(&str, &str, &[u8])] = &[
+    (
+        "mermaid.min.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("assets/mermaid/mermaid.min.js.gz"),
+    ),
+    (
+        "katex.min.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("assets/katex/katex.min.js.gz"),
+    ),
+];
 
 /// The inflated bodies, in the order of [`PACKED`], filled in on first use.
 ///
@@ -261,17 +315,55 @@ mod tests {
         assert!(!response.body().is_empty());
     }
 
-    /// The one asset that is not stored as it is served. A body the size of the
+    /// The assets that are not stored as they are served. A body the size of the
     /// gzip file would mean the compressed bytes went out verbatim, which the
     /// webview would report only as a script that silently did nothing.
     #[test]
     fn packed_assets_are_served_inflated() {
-        let response = serve(&request("/__mark__/mermaid.min.js"), Path::new("/tmp"), "");
-        assert_eq!(response.status(), StatusCode::OK);
+        for (index, (name, _, packed)) in PACKED.iter().enumerate() {
+            let response = serve(&request(&format!("/__mark__/{name}")), Path::new("/tmp"), "");
+            assert_eq!(response.status(), StatusCode::OK, "{name}");
 
-        let body = response.body();
-        assert!(body.len() > PACKED[0].2.len() * 2, "{} bytes", body.len());
-        assert!(body.windows(7).any(|w| w == b"mermaid"));
+            let body = response.body();
+            assert!(body.len() > packed.len() * 2, "{name}: {} bytes", body.len());
+
+            // The name without its extensions is in every one of these bundles,
+            // which is as much as a byte comparison can say about a script.
+            let needle = name.split('.').next().expect("a name").as_bytes();
+            assert!(
+                body.windows(needle.len()).any(|w| w == needle),
+                "{name} does not look inflated"
+            );
+            assert_eq!(unpacked(index), body.as_ref(), "{name} came from elsewhere");
+        }
+    }
+
+    /// The stylesheet and the fonts it asks for are two lists that have to say
+    /// the same thing, and only one of them is written by hand here: a KaTeX
+    /// version that adds a face would ship a stylesheet pointing at a file that
+    /// is not embedded, and the formula would silently fall back to a font that
+    /// has no maths in it.
+    #[test]
+    fn every_katex_font_the_stylesheet_asks_for_is_embedded() {
+        let css = include_str!("assets/katex/katex.min.css");
+        let mut asked = 0;
+
+        for (at, opening) in css.match_indices("url(") {
+            let rest = &css[at + opening.len()..];
+            let Some(url) = rest.split(')').next() else {
+                continue;
+            };
+            if !url.ends_with(".woff2") {
+                continue;
+            }
+            assert!(
+                ASSETS.iter().any(|(name, _, _)| *name == url),
+                "{url} is in the stylesheet but not in the binary"
+            );
+            asked += 1;
+        }
+
+        assert!(asked > 15, "only {asked} fonts were checked");
     }
 
     #[test]
