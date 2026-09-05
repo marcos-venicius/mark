@@ -100,6 +100,7 @@
       var mine = (generation += 1);
       content.innerHTML = html;
       labelCodeBlocks();
+      addCopyButtons();
       wrapTables();
       buildToc();
       // Diagrams and formulas both change the height of everything below them,
@@ -132,6 +133,106 @@
       table.parentNode.insertBefore(wrap, table);
       wrap.appendChild(table);
     });
+  }
+
+  // ------------------------------------------------------------------- copy
+
+  var COPY_LABEL = "Copy";
+
+  // A button on every code block, which is the one thing a reader wants to do
+  // with code that reading it does not give them.
+  //
+  // It goes in a wrapper rather than in the <pre> itself, for the reason the
+  // table above has one: a <pre> is its own horizontal scroller, and anything
+  // positioned inside it scrolls away with the code. The fences that are going
+  // to be drawn -- mermaid and maths -- are left alone: their source is on
+  // screen only when the drawing failed, and by then the note above it is the
+  // thing to read.
+  function addCopyButtons() {
+    content.querySelectorAll("pre > code").forEach(function (code) {
+      if (code.classList.contains("language-mermaid")) return;
+      if (code.hasAttribute("data-math-style")) return;
+
+      var pre = code.parentNode;
+      var wrap = document.createElement("div");
+      var button = document.createElement("button");
+
+      wrap.className = "code-wrap";
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+
+      button.type = "button";
+      button.className = "copy";
+      button.title = "Copy this block";
+      button.textContent = COPY_LABEL;
+      button.addEventListener("click", function () {
+        copyBlock(code, button);
+      });
+      wrap.appendChild(button);
+    });
+  }
+
+  function copyBlock(code, button) {
+    // The fence's own text: the highlighter wrapped it in spans, and textContent
+    // hands back exactly what was written. What it also hands back is the
+    // newline the block ends with, which is one more than anyone pasting wants.
+    var text = code.textContent.replace(/\n+$/, "");
+
+    writeClipboard(text).then(
+      function () {
+        say(button, "Copied");
+      },
+      function () {
+        say(button, "Failed");
+      }
+    );
+  }
+
+  // The asynchronous clipboard first, because it leaves whatever the reader has
+  // selected alone. Both webviews put this page in a secure context, so it is
+  // there -- mark:// on WebKit, http://mark.localhost on WebView2 -- but the
+  // permission behind it can still be refused, and the older way costs nothing
+  // to keep for that case.
+  function writeClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () {
+        return legacyCopy(text);
+      });
+    }
+    return legacyCopy(text);
+  }
+
+  function legacyCopy(text) {
+    var area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.className = "offscreen";
+    document.body.appendChild(area);
+    area.select();
+
+    var copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch (error) {
+      copied = false;
+    }
+
+    document.body.removeChild(area);
+    page.focus();
+    return copied ? Promise.resolve() : Promise.reject(new Error("the clipboard refused"));
+  }
+
+  // The button says what happened and then goes back to being a button. The
+  // timer is kept on the button itself so that a second copy restarts its own
+  // countdown rather than a shared one somebody else started.
+  function say(button, message) {
+    button.textContent = message;
+    button.classList.add("said");
+    clearTimeout(button.sayTimer);
+    button.sayTimer = setTimeout(function () {
+      button.textContent = COPY_LABEL;
+      button.classList.remove("said");
+    }, 1400);
   }
 
   // --------------------------------------------------------------- diagrams

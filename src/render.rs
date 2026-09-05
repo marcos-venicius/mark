@@ -583,6 +583,20 @@ mod tests {
         }
     }
 
+    /// The copy button is built in one file and dressed in the other, and only
+    /// the class names connect them: rename one and the button turns into an
+    /// unstyled word sitting on top of the code.
+    #[test]
+    fn the_page_and_the_stylesheet_agree_on_the_copy_button_classes() {
+        let css = include_str!("assets/style.css");
+        let js = include_str!("assets/app.js");
+
+        for class in ["code-wrap", "copy", "said", "offscreen"] {
+            assert!(css.contains(&format!(".{class}")), "style.css lost {class}");
+            assert!(js.contains(&format!("\"{class}\"")), "app.js lost {class}");
+        }
+    }
+
     /// The declarations of the first rule using `selector`, sorted.
     fn declarations(css: &str, selector: &str) -> Vec<String> {
         let at = css.find(selector).expect("selector is in the stylesheet");

@@ -4,8 +4,10 @@ Back to the [examples](README.md).
 
 Blocks are highlighted with the language set `bat` ships, so the ones a README
 actually contains are covered rather than only the classics. Each block is
-labelled with its language, in the corner. Both palettes are built in: press
-<kbd>d</kbd> and the colours follow the page.
+labelled with its language in the left corner, and the right one holds a button
+that copies the block — it keeps out of the way until the pointer is on the
+block, and says so once it has copied.
+Both palettes are built in: press <kbd>d</kbd> and the colours follow the page.
 
 An unlabelled block is left as plain text, and `inline code` is never
 highlighted at all.

@@ -361,20 +361,77 @@ pre > code {
    block needs room above its first line, or a long one scrolls under the label. */
 pre[data-lang] { padding-top: 1.9rem; }
 
+/* On the left, because the corner opposite is the copy button's: the two would
+   otherwise be one crowded strip, with the label pushed out of the corner to
+   make room for it. */
 pre[data-lang]::before {
   content: attr(data-lang);
   position: absolute;
   top: 0;
-  right: 0;
+  left: 0;
   padding: 0.15rem 0.7rem;
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  border-radius: 0 9px 0 8px;
+  border-radius: 9px 0 8px 0;
   background: var(--surface-strong);
   color: var(--muted);
   font-size: 0.7rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* The copy button, one per code block. It lives in a wrapper rather than in the
+   <pre> for the reason a wide table has one: a <pre> is its own horizontal
+   scroller, and anything positioned inside it slides away with the code. */
+.code-wrap { position: relative; margin: 1.5em 0; }
+.code-wrap > pre { margin: 0; }
+
+/* Discreet enough to forget about, present enough to be found -- the half
+   opacity the help button rests at, for the same reason: a page of fences should
+   read as a document and not as a page of controls, and a reader who never
+   hovers anything still has to learn that the button is there. Full strength
+   once the pointer is on the block, or the keyboard on the button. */
+.copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+  /* Wide enough for the longest thing it says, so that saying it does not
+     resize the button under the pointer. */
+  min-width: 4.6rem;
+  padding: 0.15rem 0.7rem;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 9px 0 8px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  /* Dragging across the block to copy it by hand should not pick the word
+     "copy" up along with the code. */
+  user-select: none;
+  opacity: 0.5;
+  transition: opacity 0.12s ease;
+}
+
+.code-wrap:hover > .copy,
+.copy:focus-visible,
+.copy.said { opacity: 1; }
+
+.copy:hover { color: var(--text); }
+.copy.said { color: var(--tip); }
+
+/* Where the fallback copy parks its textarea. Off the page rather than hidden:
+   execCommand copies a selection, and there is nothing to select in something
+   display: none has taken out of the layout. */
+.offscreen {
+  position: fixed;
+  top: -100vh;
+  left: -100vw;
+  opacity: 0;
 }
 
 /* --------------------------------------------------------------- diagrams */
@@ -794,6 +851,9 @@ tbody tr:nth-child(even) { background: var(--surface); }
 
   .table-wrap,
   .katex-display { overflow-x: visible; }
+
+  /* Nothing on paper is worth pressing. */
+  .copy { display: none; }
 
   /* A link nobody can click is worth the address behind it -- but only when that
      address leads somewhere the reader can go. Relative links point at files

@@ -116,7 +116,8 @@ practical way to see it — a document opened from Explorer never passes a promp
   footnotes, description lists, superscript.
 - **Syntax highlighting** with the language set `bat` uses, so TSX, TOML,
   Dockerfile and the rest are covered rather than just the classics. Each block
-  is labelled with its language.
+  is labelled with its language in one corner, and carries a copy button in the
+  other, which says so when it has copied.
 - **Images**, local or remote. Local paths are resolved relative to the document,
   including ones that point up a directory.
 - **Alerts** — GitHub's `> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`

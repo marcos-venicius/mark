@@ -102,7 +102,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 38 tests: 23 in render.rs, 9 in protocol.rs, 6 in main.rs
+cargo test          # 39 tests: 24 in render.rs, 9 in protocol.rs, 6 in main.rs
 cargo clippy
 cargo run -- examples/README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package

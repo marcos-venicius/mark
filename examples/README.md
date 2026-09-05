@@ -9,7 +9,8 @@ cargo run -- examples/README.md
 
 - [Text](text.md) — headings, lists, tables, alerts, footnotes and the raw HTML
   a document is allowed to bring with it.
-- [Code](code.md) — syntax highlighting, one block per language.
+- [Code](code.md) — syntax highlighting and the copy button, one block per
+  language.
 - [Diagrams](diagrams.md) — ```` ```mermaid ```` fences, in both palettes.
 - [Maths](maths.md) — `$...$`, `$$...$$` and a ```` ```math ```` fence.
 - [Images](images.md) — local files, including ones a directory up.
