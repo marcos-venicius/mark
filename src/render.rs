@@ -569,6 +569,23 @@ mod tests {
         }
     }
 
+    /// The theme button carries a moon and a sun and the stylesheet shows one,
+    /// exactly as a diagram carries both its palettes. Miss one of the two ways
+    /// of arriving at dark and the button offers to do what it has just done.
+    #[test]
+    fn both_dark_palettes_swap_the_theme_icon_the_same_way() {
+        let css = include_str!("assets/style.css");
+
+        for selector in [DARK_BY_DEFAULT, DARK_CHOSEN] {
+            for rule in [
+                format!("{selector} #bar-theme .on-light {{ display: none; }}"),
+                format!("{selector} #bar-theme .on-dark {{ display: block; }}"),
+            ] {
+                assert!(css.contains(&rule), "the stylesheet is missing {rule}");
+            }
+        }
+    }
+
     /// The two drawings of a diagram are told apart by a class name that app.js
     /// writes and the stylesheet reads, and nothing else connects them: rename
     /// it in one file and both palettes end up on the page at once.

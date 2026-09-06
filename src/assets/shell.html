@@ -22,13 +22,66 @@
 <style>/*{{SYNTAX_CSS}}*/</style>
 </head>
 <body>
-  <aside id="toc" hidden>
-    <p class="toc-heading">Contents</p>
-    <nav id="toc-list"></nav>
-  </aside>
+  <!-- Everything here has a key as well, and the key is in the tooltip: the bar
+       is how a reader who never opens a terminal finds out that the keys exist
+       at all. Nothing in it reaches Rust by a route of its own -- each button
+       sends the message its shortcut already sends.
 
-  <div id="page">
-    <main id="content"></main>
+       The icons are drawn here rather than written as characters. The two fonts
+       compiled into the binary are Inter and JetBrains Mono, and neither has a
+       reload or a printer glyph; a document should not look different because
+       the machine happens to have a font that does. -->
+  <header id="bar">
+    <div class="bar-group">
+      <button id="bar-back" type="button" title="Back (Alt Left)" aria-label="Back" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+      </button>
+      <button id="bar-forward" type="button" title="Forward (Alt Right)" aria-label="Forward" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </button>
+      <button id="bar-reload" type="button" title="Reload from disk (Ctrl R)" aria-label="Reload">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3.5V9h-5.5"/></svg>
+      </button>
+
+      <span class="bar-sep"></span>
+
+      <button id="bar-toc" type="button" title="Table of contents (T)" aria-label="Table of contents" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>
+      </button>
+      <button id="bar-find" type="button" title="Find in page (/)" aria-label="Find in page" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+      </button>
+    </div>
+
+    <span id="bar-name"></span>
+
+    <div class="bar-group bar-right">
+      <button id="bar-print" type="button" title="Print, or save as PDF (Ctrl P)" aria-label="Print">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6"/><path d="M7 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7z"/></svg>
+      </button>
+      <!-- Both drawings travel with the button and the stylesheet shows one, the
+           way a mermaid diagram carries both its palettes. Deciding here instead
+           would mean listening for the system palette changing under an open
+           window, which the stylesheet already does for nothing. -->
+      <button id="bar-theme" type="button" title="Light or dark (D)" aria-label="Switch between light and dark">
+        <svg class="on-light" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="on-dark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button id="help-open" type="button" title="Help (?)" aria-label="Help">?</button>
+    </div>
+  </header>
+
+  <!-- The bar is a row and the rest of the window is what is left below it, so
+       the sidebar and the document need a row of their own to sit in. -->
+  <div id="split">
+    <aside id="toc" hidden>
+      <p class="toc-heading">Contents</p>
+      <nav id="toc-list"></nav>
+    </aside>
+
+    <div id="page">
+      <main id="content"></main>
+    </div>
   </div>
 
   <div id="find" hidden>
@@ -47,10 +100,6 @@
       {{HELP}}
     </div>
   </div>
-
-  <!-- The only visible affordance in the window. Without it, a reader who never
-       runs mark from a terminal has no way of learning that the keys exist. -->
-  <button id="help-open" type="button" title="Help (?)" aria-label="Help">?</button>
 
   <script src="{{APP_URL}}"></script>
 </body>

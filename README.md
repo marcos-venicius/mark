@@ -137,6 +137,10 @@ practical way to see it — a document opened from Explorer never passes a promp
 - **Links between documents.** Clicking a relative link to another `.md` opens it
   in the same window, with back and forward history. Links to the web open in
   your default browser; other files open in whatever application owns them.
+- **A bar across the top** — back and forward, reload, the table of contents,
+  find in page, print, light or dark, and the help panel, with the name of the
+  open file in the middle. Every button is also a key, and its tooltip says which
+  one, so the shortcuts are there to be picked up rather than looked up.
 - **Bundled typography** — Inter for text, JetBrains Mono for code, compiled into
   the binary so a document reads the same on a machine that has neither. See
   [src/assets/fonts/README.md](src/assets/fonts/README.md).
@@ -197,6 +201,12 @@ The shortcut list is written down once, as a table in `main.rs`. `--help` lays i
 out as a column of text and the help panel as rows of keys, so a shortcut added
 in one place cannot be missing from the other — which matters most on Windows,
 where the panel is the only copy a reader is likely to see.
+
+The bar across the top can do nothing the keys cannot: each button sends the
+message its shortcut sends, and no part of it has a route into Rust of its own.
+What it knows that the page does not — which file is open, and whether the
+history has anywhere left to go — travels down with the document itself rather
+than in a message of its own, so the two can never arrive out of order.
 
 Windows has no fork, and a console application cannot give its console back. The
 equivalent is being a GUI program from the start, which is what the binary is —

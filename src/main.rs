@@ -369,10 +369,20 @@ impl App {
         };
 
         let keep_scroll = matches!(placement, Placement::Keep);
+        // The bar's half of the same call. It rides along with the document
+        // rather than going down a channel of its own: both change together
+        // every time, and one message cannot arrive before the other.
+        let state = serde_json::json!({
+            "name": file_name(path),
+            "path": path.display().to_string(),
+            "back": self.cursor > 0,
+            "forward": self.cursor + 1 < self.history.len(),
+        });
         let script = format!(
-            "window.__mark.setContent({}, {})",
+            "window.__mark.setContent({}, {}, {})",
             serde_json::Value::from(body),
             serde_json::Value::from(keep_scroll),
+            state,
         );
         let _ = self.webview.evaluate_script(&script);
     }
@@ -606,12 +616,17 @@ fn is_markdown(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn title_for(path: &Path) -> String {
-    let name = path
-        .file_name()
+/// What to call the open document: shown in the title bar, and again in the bar
+/// inside the window, where a maximised window on a tiling desktop may leave no
+/// title bar to read.
+fn file_name(path: &Path) -> String {
+    path.file_name()
         .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string());
-    format!("{name} \u{2014} mark")
+        .unwrap_or_else(|| path.display().to_string())
+}
+
+fn title_for(path: &Path) -> String {
+    format!("{} \u{2014} mark", file_name(path))
 }
 
 fn parent_of(path: &Path) -> PathBuf {
@@ -667,6 +682,47 @@ mod tests {
         assert!(
             !shell.contains("{{"),
             "an unreplaced placeholder is still there"
+        );
+    }
+
+    /// The bar is drawn in one file and worked in another, with nothing but an
+    /// id between them. A button added to the markup and never wired up is a
+    /// control that looks like the rest of the bar and does nothing at all,
+    /// which no other test here would notice.
+    #[test]
+    fn every_bar_button_is_wired_up() {
+        let shell = include_str!("assets/shell.html");
+        let js = include_str!("assets/app.js");
+
+        let ids: Vec<&str> = shell
+            .match_indices("id=\"bar-")
+            .filter_map(|(at, _)| shell[at + 4..].split('"').next())
+            .collect();
+
+        assert!(ids.len() > 5, "the bar has almost nothing in it: {ids:?}");
+
+        for id in ids {
+            assert!(
+                js.contains(&format!("\"{id}\"")),
+                "{id} is in the bar but app.js never mentions it"
+            );
+        }
+    }
+
+    /// Print rules are the one part of the stylesheet nobody sees while working
+    /// on the page, and a bar of buttons across the top of a printout is only
+    /// found by printing something.
+    #[test]
+    fn the_bar_is_not_printed() {
+        let css = include_str!("assets/style.css");
+        let print = &css[css.find("@media print").expect("no print block")..];
+
+        assert!(print.contains("#bar,"), "the bar prints along with the page");
+        // Without this the document below the bar is a lone flex item, and a
+        // flex item does not break across pages: the printout stops at page one.
+        assert!(
+            print.contains("#split { display: block; }"),
+            "the page is still a flex item on paper"
         );
     }
 

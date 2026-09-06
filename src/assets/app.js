@@ -12,6 +12,11 @@
   var help = document.getElementById("help");
   var helpCard = document.getElementById("help-card");
   var helpClose = document.getElementById("help-close");
+  var barName = document.getElementById("bar-name");
+  var barBack = document.getElementById("bar-back");
+  var barForward = document.getElementById("bar-forward");
+  var barToc = document.getElementById("bar-toc");
+  var barFind = document.getElementById("bar-find");
 
   var BASE_FONT_SIZE = 16.5;
   var ZOOM_STEPS = [0.75, 0.85, 0.92, 1, 1.1, 1.25, 1.4, 1.6, 1.85];
@@ -93,11 +98,16 @@
 
   // ------------------------------------------------------------- rendering
 
-  // Called from Rust every time the document is loaded or re-read from disk.
+  // Called from Rust every time the document is loaded or re-read from disk. The
+  // state is what the bar shows and the page cannot work out for itself: which
+  // file this is and whether the history has anywhere to go. It travels with the
+  // document rather than in a message of its own, so there is no order between
+  // the two to get right.
   window.__mark = {
-    setContent: function (html, keepScroll) {
+    setContent: function (html, keepScroll, state) {
       var offset = keepScroll ? page.scrollTop : 0;
       var mine = (generation += 1);
+      applyState(state);
       content.innerHTML = html;
       labelCodeBlocks();
       addCopyButtons();
@@ -472,6 +482,7 @@
     // A document with no heading at all has nothing to list, whoever asks.
     if (headings.length === 0) {
       toc.hidden = true;
+      syncBar();
       return;
     }
 
@@ -484,6 +495,7 @@
     });
 
     toc.hidden = tocChoice === null ? headings.length < 3 : !tocChoice;
+    syncBar();
     watchHeadings(headings);
   }
 
@@ -544,6 +556,7 @@
     // document is the rule above rather than an earlier press.
     tocChoice = toc.hidden;
     toc.hidden = !tocChoice || tocList.childElementCount === 0;
+    syncBar();
   }
 
   // ------------------------------------------------------------------ links
@@ -577,6 +590,7 @@
 
   function openFind() {
     find.hidden = false;
+    syncBar();
     findInput.select();
     findInput.focus();
   }
@@ -584,6 +598,7 @@
   function closeFind() {
     find.hidden = true;
     find.classList.remove("no-match");
+    syncBar();
     window.getSelection().removeAllRanges();
     page.focus();
   }
@@ -641,6 +656,62 @@
   // A click on the dimmed area around the card, which is the panel itself.
   help.addEventListener("click", function (event) {
     if (event.target === help) closeHelp();
+  });
+
+  // ---------------------------------------------------------------- top bar
+
+  // Nothing here is an action of its own: each button sends the message its
+  // shortcut already sends, so that the shortcut is not the only way in.
+
+  // What Rust knows and the page does not: which file is on screen, and whether
+  // the history has anywhere left to go in either direction.
+  function applyState(state) {
+    if (!state) return;
+    barName.textContent = state.name;
+    // The whole path behind the name, because the name on its own often is not
+    // an answer -- half the documents anyone opens are called README.md.
+    barName.title = state.path;
+    barBack.disabled = !state.back;
+    barForward.disabled = !state.forward;
+  }
+
+  // The two things in the bar that open something and leave it open. Everything
+  // else there happens once and has no state to show.
+  function syncBar() {
+    barToc.setAttribute("aria-pressed", String(!toc.hidden));
+    barFind.setAttribute("aria-pressed", String(!find.hidden));
+  }
+
+  // A click leaves the focus on the button, where the next Enter or space would
+  // press it a second time -- on the back button, that is the history walking
+  // away underneath someone who was only trying to read. page.focus(), which the
+  // find bar uses to get out of its own input, is no help here: #page takes no
+  // focus of its own.
+  function press(id, action) {
+    var button = document.getElementById(id);
+    button.addEventListener("click", function () {
+      button.blur();
+      action();
+    });
+  }
+
+  press("bar-back", function () {
+    send({ type: "back" });
+  });
+  press("bar-forward", function () {
+    send({ type: "forward" });
+  });
+  press("bar-reload", function () {
+    send({ type: "reload" });
+  });
+  press("bar-print", function () {
+    send({ type: "print" });
+  });
+  press("bar-toc", toggleToc);
+  press("bar-theme", toggleTheme);
+  press("bar-find", function () {
+    if (find.hidden) openFind();
+    else closeFind();
   });
 
   // ------------------------------------------------------------------- zoom

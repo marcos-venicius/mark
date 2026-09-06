@@ -47,15 +47,18 @@ never reach it: `linux/mark.desktop`, `linux/mark.xml`, `windows/mark.iss` and
 A document reaches the screen like this: `parse_args` checks the arguments, `detach` hands
 the terminal back, the window and webview come up, and `app.js` sends `{"type":"ready"}`.
 Only then does `App::show` read the file, `Renderer::render` turn it into HTML, and Rust
-inject it with `window.__mark.setContent(html, keepScroll)`. The page asks rather than
-Rust pushing on a timer, which removes the race with the webview loading.
+inject it with `window.__mark.setContent(html, keepScroll, state)`. The page asks rather
+than Rust pushing on a timer, which removes the race with the webview loading. `state` is
+the top bar's half of that same call -- the file name, its path, and whether the history
+has anywhere to go either way -- carried along with the document so that the two cannot
+arrive out of order.
 
 Shared state is one thing: `DocDir = Arc<Mutex<PathBuf>>` (`src/render.rs:15`), the
 directory of the document on screen. The URL rewriter and the protocol handler both read
-it; `App::navigated` (`src/main.rs:430`) swaps it when the reader follows a link.
+it; `App::navigated` (`src/main.rs:440`) swaps it when the reader follows a link.
 
 The Rust/page boundary is one channel each way — `evaluate_script` down, and
-`decode_message` (`src/main.rs:508`) over `{"type": ...}` JSON up. Page behaviour that
+`decode_message` (`src/main.rs:518`) over `{"type": ...}` JSON up. Page behaviour that
 needs the filesystem becomes a variant of `enum UserEvent` (`src/main.rs:72`) and a case
 in `decode_message`. Nothing else crosses while the window is open.
 
@@ -71,10 +74,11 @@ because that is the relative URL `katex.min.css` asks for, and
 `every_katex_font_the_stylesheet_asks_for_is_embedded` is what catches a version that
 adds one.
 
-Before it opens there is one more path: `build_shell` (`src/main.rs:580`) fills the
+Before it opens there is one more path: `build_shell` (`src/main.rs:590`) fills the
 placeholders in `shell.html` once — the asset URLs, the syntax palette, and the help
 panel that `help_html` builds from `SHORTCUTS` (`src/main.rs:51`). Markup that never
-changes belongs there rather than in a `setContent` call.
+changes belongs there rather than in a `setContent` call: the top bar and its icons are
+written out in `shell.html` for that reason, and only what the bar shows arrives later.
 
 ## Invariants
 
@@ -84,11 +88,12 @@ Each of these is load-bearing. The comment above it says the same thing at more 
 | --- | --- | --- |
 | Fork before any thread starts or anything touches GTK | `src/main.rs:211` | the child holds locks nothing will release |
 | Relative URLs become absolute at render time, raw HTML included | `src/render.rs:71`, `:245` | the webview flattens `../` and the image is never found |
-| Attach the webview through the GTK vbox, not a raw handle | `src/main.rs:485` | wry refuses a native Wayland session outright |
+| Attach the webview through the GTK vbox, not a raw handle | `src/main.rs:495` | wry refuses a native Wayland session outright |
 | Keep `Access` and `Modify(Metadata)` out of the watcher | `src/watcher.rs:57` | rendering opens the file, which is reported as a change, forever |
 | Scope both palettes; `@media print` comes last | `src/render.rs:106` | one stray token in one language; a printout in pale colours |
 | Fill in only the standard handles Windows left empty | `src/main.rs:308` | `mark --version > out.txt` prints to the console and leaves the file empty |
-| Draw every diagram once per palette; the stylesheet picks one | `src/assets/app.js:28`, `src/assets/style.css:380` | mermaid bakes its colours into the SVG, so `d` would need a redraw and a dark page would print dark |
+| `#split` keeps `min-height: 0` under the bar | `src/assets/style.css:279` | a flex item will not shrink below its content, so the window scrolls instead of the document |
+| Draw every diagram once per palette; the stylesheet picks one | `src/assets/app.js:32`, `src/assets/style.css:583` | mermaid bakes its colours into the SVG, so `d` would need a redraw and a dark page would print dark |
 
 Two more are there because `render.unsafe = true` lets documents bring their own HTML: the
 Content Security Policy in `src/assets/shell.html` (`default-src 'none'`,
@@ -102,7 +107,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 39 tests: 24 in render.rs, 9 in protocol.rs, 6 in main.rs
+cargo test          # 42 tests: 25 in render.rs, 9 in protocol.rs, 8 in main.rs
 cargo clippy
 cargo run -- examples/README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package
@@ -136,11 +141,12 @@ Things written down nowhere else:
   `rustup target add x86_64-pc-windows-msvc` and then `cargo check` on a scratch crate
   holding the same code. The full crate does not cross-check -- `onig_sys` compiles C.
 - Tests live inline in `#[cfg(test)] mod tests`. There is no `tests/` directory, and
-  `watcher.rs` has none. The six in `main.rs` all guard something written down twice or
+  `watcher.rs` has none. The eight in `main.rs` all guard something written down twice or
   unreachable from Linux: the shortcut table (rendered into the terminal and the window,
   and the window's copy cannot be checked from a terminal), the file types the two
-  installers claim -- against `MARKDOWN_EXTENSIONS` and against each other -- and the
-  sizes inside the `.ico`.
+  installers claim -- against `MARKDOWN_EXTENSIONS` and against each other -- the sizes
+  inside the `.ico`, the bar's buttons against the ids `app.js` wires up, and the print
+  rules that keep the bar off the paper.
 - Building on Linux needs `libwebkit2gtk-4.1-dev` and `libsoup-3.0-dev`; Rust 1.85 or newer.
 
 ## Style
@@ -172,7 +178,7 @@ see Ground rules.
 
 | Task | Files |
 | --- | --- |
-| A new keyboard shortcut | `SHORTCUTS` in `src/main.rs` (the terminal text and the help panel both follow) -> `src/assets/app.js` keydown -> `UserEvent` and `decode_message` in `src/main.rs`, if it needs the filesystem -> the README table |
+| A new keyboard shortcut | `SHORTCUTS` in `src/main.rs` (the terminal text and the help panel both follow) -> `src/assets/app.js` keydown -> `UserEvent` and `decode_message` in `src/main.rs`, if it needs the filesystem -> the README table -> a button in `#bar` if it is worth pointing at, with the key in its tooltip |
 | A new servable file type | `SERVABLE` in `src/protocol.rs` — a security decision |
 | A new comrak extension | `Renderer::new` in `src/render.rs`, styling in `src/assets/style.css`, plus a test |
 | A newer KaTeX | `src/assets/katex/README.md` has the commands, the three properties the bundle has to keep, and the fonts to re-fetch |
