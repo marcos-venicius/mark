@@ -55,7 +55,7 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("Enter or Shift Enter", "Next, previous match"),
     ("t", "Toggle the table of contents"),
     ("z", "Widen the document to the window"),
-    ("d", "Switch between light and dark"),
+    ("d", "Cycle through the themes"),
     ("Shift D", "Go back to following the system"),
     ("Alt Left/Right", "Go back and forward between documents"),
     ("Home or End", "Top, bottom"),
@@ -719,6 +719,10 @@ mod tests {
         let print = &css[css.find("@media print").expect("no print block")..];
 
         assert!(print.contains("#bar,"), "the bar prints along with the page");
+        assert!(
+            print.contains("#theme-menu,"),
+            "the theme menu prints along with the page"
+        );
         // Without this the document below the bar is a lone flex item, and a
         // flex item does not break across pages: the printout stops at page one.
         assert!(

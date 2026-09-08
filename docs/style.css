@@ -89,7 +89,7 @@
    one selector, because one of them is a media query. Keep the blocks
    identical. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     --bg: #0f1116;
     --sidebar-bg: #0b0d11;
     --surface: #171a21;
@@ -160,6 +160,84 @@
   --syn-fn: #d2a8ff;
   --syn-num: #79c0ff;
   --syn-type: #ffa657;
+
+  color-scheme: dark;
+}
+
+/* Catppuccin Mocha and Gruvbox dark, again the app's own, again token for token
+   -- and with a --syn-* set each, since the code in the mock is highlighted by
+   hand rather than by syntect. One copy apiece: no system asks for either, so
+   the media query above has nothing to say about them. */
+:root[data-theme="catppuccin-mocha"] {
+  --bg: #1e1e2e;
+  --sidebar-bg: #181825;
+  --surface: #313244;
+  --surface-strong: #45475a;
+  --border: #313244;
+  --border-strong: #45475a;
+  --text: #cdd6f4;
+  --text-soft: #bac2de;
+  --muted: #a6adc8;
+  --link: #89b4fa;
+  --accent: #cba6f7;
+  --shadow: 0 6px 24px rgba(17, 17, 27, 0.55);
+  --selection: rgba(137, 180, 250, 0.26);
+  --backdrop: rgba(17, 17, 27, 0.62);
+
+  --note: #89b4fa;
+  --tip: #a6e3a1;
+  --important: #cba6f7;
+  --warning: #f9e2af;
+  --caution: #f38ba8;
+
+  --site-nav-bg: rgba(30, 30, 46, 0.82);
+  --site-glow: rgba(203, 166, 247, 0.13);
+  --site-frame: 0 24px 70px -28px rgba(17, 17, 27, 0.8);
+  --site-on-accent: #1e1e2e;
+
+  --syn-key: #cba6f7;
+  --syn-str: #a6e3a1;
+  --syn-com: #6c7086;
+  --syn-fn: #89b4fa;
+  --syn-num: #fab387;
+  --syn-type: #f9e2af;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="gruvbox-dark"] {
+  --bg: #282828;
+  --sidebar-bg: #1d2021;
+  --surface: #32302f;
+  --surface-strong: #3c3836;
+  --border: #3c3836;
+  --border-strong: #504945;
+  --text: #ebdbb2;
+  --text-soft: #d5c4a1;
+  --muted: #a89984;
+  --link: #83a598;
+  --accent: #fe8019;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  --selection: rgba(131, 165, 152, 0.26);
+  --backdrop: rgba(29, 32, 33, 0.62);
+
+  --note: #83a598;
+  --tip: #b8bb26;
+  --important: #d3869b;
+  --warning: #fabd2f;
+  --caution: #fb4934;
+
+  --site-nav-bg: rgba(40, 40, 40, 0.82);
+  --site-glow: rgba(254, 128, 25, 0.13);
+  --site-frame: 0 24px 70px -28px rgba(0, 0, 0, 0.8);
+  --site-on-accent: #1d2021;
+
+  --syn-key: #fb4934;
+  --syn-str: #b8bb26;
+  --syn-com: #928374;
+  --syn-fn: #8ec07c;
+  --syn-num: #d3869b;
+  --syn-type: #fabd2f;
 
   color-scheme: dark;
 }
@@ -306,27 +384,61 @@ section { padding: 5.5rem 0; }
   stroke-linejoin: round;
 }
 
-/* A moon on a light page and a sun on a dark one: the button shows what
-   pressing it would give. Both drawings are in the markup and the stylesheet
-   picks one, which is how the app does it -- and it is also what keeps the
-   page correct before any script has run. The mock's bar carries the same
-   two drawings, so the selectors take it along. */
-#theme .on-light,
-.window-bar .on-light { display: block; }
-#theme .on-dark,
-.window-bar .on-dark { display: none; }
+/* The button carried a moon and a sun while it flipped between two palettes,
+   and the stylesheet showed whichever said what pressing it would give. It
+   opens a menu of five now, so it promises nothing and one drawing is the
+   honest number -- the same change the app's own bar made. The ticked entry
+   is what says which palette is in use.
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) #theme .on-light,
-  :root:not([data-theme="light"]) .window-bar .on-light { display: none; }
-  :root:not([data-theme="light"]) #theme .on-dark,
-  :root:not([data-theme="light"]) .window-bar .on-dark { display: block; }
+   Positioned because the menu hangs off it, and the nav is a flex row that
+   would otherwise be pushed about by an open menu. */
+.theme-picker { position: relative; }
+
+#theme[aria-expanded="true"] { color: var(--accent); }
+
+#theme-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  min-width: 11rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
 }
 
-:root[data-theme="dark"] #theme .on-light,
-:root[data-theme="dark"] .window-bar .on-light { display: none; }
-:root[data-theme="dark"] #theme .on-dark,
-:root[data-theme="dark"] .window-bar .on-dark { display: block; }
+#theme-menu button {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.36rem 0.55rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#theme-menu button:hover,
+#theme-menu button:focus-visible { background: var(--surface-strong); }
+
+#theme-menu button[aria-checked="true"] { color: var(--accent); }
+
+/* The tick comes from the stylesheet off aria-checked, so the script has only
+   the one attribute to keep straight. It holds its width when empty, or the
+   chosen entry would sit further right than the rest. */
+#theme-menu button::before {
+  width: 0.9em;
+  content: "";
+}
+
+#theme-menu button[aria-checked="true"]::before { content: "\2713"; }
 
 /* ------------------------------------------------------------------- hero */
 

@@ -17,52 +17,97 @@
   var THEME_KEY = "mark.site.theme";
   var root = document.documentElement;
   var button = document.getElementById("theme");
+  var menu = document.getElementById("theme-menu");
+  var items = menu ? menu.getElementsByTagName("button") : [];
 
-  function stored() {
-    try {
-      return localStorage.getItem(THEME_KEY);
-    } catch (e) {
-      return null;
+  /* The same five the window offers, in the same order and under the same
+     names. "system" is the absence of the attribute rather than a value of it,
+     which is what leaves the media query in charge. The inline script in the
+     <head> repeats the list, because it runs before this file arrives. */
+  var THEMES = ["system", "light", "dark", "catppuccin-mocha", "gruvbox-dark"];
+
+  /* What was chosen, which with "system" is not what is on screen: the desktop
+     decides that, and the menu ticks the choice rather than the result. */
+  function current() {
+    return root.dataset.theme || "system";
+  }
+
+  function mark() {
+    var index;
+    for (index = 0; index < items.length; index += 1) {
+      items[index].setAttribute("aria-checked", String(items[index].value === current()));
     }
   }
 
-  function systemIsDark() {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  function setTheme(name) {
+    if (name === "system") delete root.dataset.theme;
+    else root.dataset.theme = name;
+
+    try {
+      if (name === "system") localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, name);
+    } catch (e) {
+      /* Private browsing, or storage turned off. The choice still applies to
+         this page; it simply will not outlive it. */
+    }
+
+    mark();
   }
 
-  function isDark() {
-    var choice = root.dataset.theme;
-    return choice ? choice === "dark" : systemIsDark();
+  function openMenu() {
+    menu.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    items[Math.max(0, THEMES.indexOf(current()))].focus();
   }
 
-  function describe() {
-    if (!button) return;
-    button.setAttribute("aria-pressed", isDark() ? "true" : "false");
-    button.title = isDark() ? "Switch to light" : "Switch to dark";
+  function closeMenu() {
+    if (!menu || menu.hidden) return;
+    menu.hidden = true;
+    button.setAttribute("aria-expanded", "false");
   }
 
-  if (button) {
+  if (button && menu) {
     button.addEventListener("click", function () {
-      var next = isDark() ? "light" : "dark";
-      root.dataset.theme = next;
-      try {
-        localStorage.setItem(THEME_KEY, next);
-      } catch (e) {
-        /* Private browsing, or storage turned off. The choice still applies to
-           this page; it simply will not outlive it. */
-      }
-      describe();
+      if (menu.hidden) openMenu();
+      else closeMenu();
     });
+
+    /* Delegated, so index.html stays the only place the palettes are written
+       down. The entries have no children of their own. */
+    menu.addEventListener("click", function (event) {
+      if (event.target.tagName !== "BUTTON") return;
+      setTheme(event.target.value);
+      closeMenu();
+      button.focus();
+    });
+
+    /* Enter and space press a button on their own; only the arrows and Escape
+       need saying. */
+    menu.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        closeMenu();
+        button.focus();
+        return;
+      }
+
+      var step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+      if (!step) return;
+
+      event.preventDefault();
+      var at = Array.prototype.indexOf.call(items, document.activeElement);
+      items[(at + step + items.length) % items.length].focus();
+    });
+
+    /* Anywhere else on the page closes it. The button's own click is excluded,
+       or this would undo the press that opened the menu. */
+    document.addEventListener("click", function (event) {
+      if (menu.hidden) return;
+      if (menu.contains(event.target) || button.contains(event.target)) return;
+      closeMenu();
+    });
+
+    mark();
   }
-
-  /* Nothing has been chosen here, so the system is still in charge and the
-     button's label has to keep up with it while the page is open -- which is
-     what the window does too. */
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
-    if (!stored()) describe();
-  });
-
-  describe();
 
   /* ------------------------------------------------- the window's panes */
 

@@ -19,19 +19,34 @@ pub type DocDir = Arc<Mutex<PathBuf>>;
 const HL_PREFIX: &str = "hl-";
 const HL_CLASS_STYLE: ClassStyle = ClassStyle::SpacedPrefixed { prefix: HL_PREFIX };
 
+/// A syntax theme per palette. All four come from the set bat ships, so a
+/// reader who knows Catppuccin or Gruvbox from their terminal gets the colours
+/// they already know rather than an approximation of them.
 const LIGHT_THEME: EmbeddedThemeName = EmbeddedThemeName::InspiredGithub;
 const DARK_THEME: EmbeddedThemeName = EmbeddedThemeName::OneHalfDark;
+const CATPPUCCIN_THEME: EmbeddedThemeName = EmbeddedThemeName::CatppuccinMocha;
+const GRUVBOX_THEME: EmbeddedThemeName = EmbeddedThemeName::GruvboxDark;
 
-/// The four states a palette can be selected by: the system asking for it with
-/// nothing overriding it, and the reader picking it outright.
+/// The ways a palette can be selected: the system asking for one with nothing
+/// overriding it, and the reader picking one outright.
 ///
-/// Both palettes have to be scoped, not just the dark one. A theme only emits
+/// Every palette has to be scoped, the light one included. A theme only emits
 /// rules for the scopes it actually colours, so leaving one palette unscoped
-/// would let its colours show through wherever the other has nothing to say.
-const LIGHT_BY_DEFAULT: &str = ":root:not([data-theme=\"dark\"])";
-const DARK_BY_DEFAULT: &str = ":root:not([data-theme=\"light\"])";
+/// would let its colours show through wherever the others have nothing to say.
+///
+/// `BY_DEFAULT` has to test for the attribute rather than for a particular
+/// value of it: `:not([data-theme="dark"])` was enough while dark was the only
+/// other palette, but it matches every palette but that one, so with four it
+/// would deliver two at once.
+const BY_DEFAULT: &str = ":root:not([data-theme])";
 const LIGHT_CHOSEN: &str = ":root[data-theme=\"light\"]";
 const DARK_CHOSEN: &str = ":root[data-theme=\"dark\"]";
+const CATPPUCCIN_CHOSEN: &str = ":root[data-theme=\"catppuccin-mocha\"]";
+const GRUVBOX_CHOSEN: &str = ":root[data-theme=\"gruvbox-dark\"]";
+
+/// The palettes a printer has to be talked out of, which is every one that is
+/// not already the light one.
+const DARK_CHOSEN_ALL: &[&str] = &[DARK_CHOSEN, CATPPUCCIN_CHOSEN, GRUVBOX_CHOSEN];
 
 pub struct Renderer {
     options: Options<'static>,
@@ -103,39 +118,54 @@ impl Renderer {
         }
     }
 
-    /// The stylesheet for the classes the highlighter emits, in both palettes.
+    /// The stylesheet for the classes the highlighter emits, in every palette.
     ///
     /// Keeping the colours out of the markup is what makes this possible at all:
     /// switching theme is a stylesheet matter, and never means re-rendering the
     /// document.
     ///
-    /// Each palette is emitted twice, once per way of arriving at it, because
-    /// the two cannot be written as a single selector -- one is a media query.
-    /// The explicit choices come last so they win the tie on specificity.
+    /// Light and dark are emitted twice each, once per way of arriving at them,
+    /// because the two cannot be written as a single selector -- one is a media
+    /// query. The palettes a reader has to ask for by name need only one copy:
+    /// no system asks for Catppuccin. The explicit choices come last so they win
+    /// the tie on specificity.
     ///
-    /// Printing is the third way, and it only ever wants the light one: a
-    /// printer drops the near-black background the dark theme was picked
-    /// against, and its tokens are then pale colours on white paper. So the
-    /// light theme is emitted a third time under `@media print`, against the two
-    /// selectors that would otherwise have delivered dark. Same specificity as
-    /// those, later in the file, so it wins on order -- which is what the
-    /// `@media print` block in style.css does for the rest of the page.
+    /// Printing is the last way, and it only ever wants the light one: a printer
+    /// drops the near-black background a dark theme was picked against, and its
+    /// tokens are then pale colours on white paper. So the light theme is
+    /// emitted once more under `@media print`, against every selector that would
+    /// otherwise have delivered a dark palette. Same specificity as those, later
+    /// in the file, so it wins on order -- which is what the `@media print` block
+    /// in style.css does for the rest of the page.
+    ///
+    /// Seven copies of a syntax theme come to about 175 KB, which is the largest
+    /// thing in the shell by some way. It is built once, at startup, and costs
+    /// the binary nothing: two-face carries every theme either way. A fifth
+    /// palette would add roughly 25 KB more.
     pub fn syntax_css() -> String {
         let themes = two_face::theme::extra();
         let light = theme_css(&themes, LIGHT_THEME);
         let dark = theme_css(&themes, DARK_THEME);
+        let catppuccin = theme_css(&themes, CATPPUCCIN_THEME);
+        let gruvbox = theme_css(&themes, GRUVBOX_THEME);
+
+        // One copy of the light theme covers all of print, rather than one per
+        // selector, because `scope` takes the whole list at once.
+        let mut printed = vec![BY_DEFAULT];
+        printed.extend_from_slice(DARK_CHOSEN_ALL);
 
         format!(
             "@media (prefers-color-scheme: light) {{\n{}}}\n\
              @media (prefers-color-scheme: dark) {{\n{}}}\n\
-             {}\n{}\n\
-             @media print {{\n{}{}}}",
-            scope(&light, LIGHT_BY_DEFAULT),
-            scope(&dark, DARK_BY_DEFAULT),
-            scope(&light, LIGHT_CHOSEN),
-            scope(&dark, DARK_CHOSEN),
-            scope(&light, DARK_BY_DEFAULT),
-            scope(&light, DARK_CHOSEN),
+             {}\n{}\n{}\n{}\n\
+             @media print {{\n{}}}",
+            scope(&light, &[BY_DEFAULT]),
+            scope(&dark, &[BY_DEFAULT]),
+            scope(&light, &[LIGHT_CHOSEN]),
+            scope(&dark, &[DARK_CHOSEN]),
+            scope(&catppuccin, &[CATPPUCCIN_CHOSEN]),
+            scope(&gruvbox, &[GRUVBOX_CHOSEN]),
+            scope(&light, &printed),
         )
     }
 
@@ -153,11 +183,14 @@ fn theme_css(themes: &two_face::theme::EmbeddedLazyThemeSet, name: EmbeddedTheme
         .expect("bundled theme is well-formed")
 }
 
-/// Restrict every rule in a generated stylesheet to a scope.
+/// Restrict every rule in a generated stylesheet to one or more scopes.
 ///
 /// syntect emits a flat list of class selectors and one comment at the top, so
 /// this never has to deal with nesting or at-rules.
-fn scope(css: &str, prefix: &str) -> String {
+///
+/// Taking a list rather than a single prefix is what keeps `@media print` to one
+/// copy of the light theme instead of one per palette it has to override.
+fn scope(css: &str, prefixes: &[&str]) -> String {
     let mut out = String::with_capacity(css.len() * 2);
 
     for rule in without_comments(css).split_inclusive('}') {
@@ -170,11 +203,15 @@ fn scope(css: &str, prefix: &str) -> String {
             continue;
         }
 
-        for (index, selector) in selectors.split(',').enumerate() {
-            out.push_str(if index == 0 { "" } else { ", " });
-            out.push_str(prefix);
-            out.push(' ');
-            out.push_str(selector.trim());
+        let mut first = true;
+        for prefix in prefixes {
+            for selector in selectors.split(',') {
+                out.push_str(if first { "" } else { ", " });
+                first = false;
+                out.push_str(prefix);
+                out.push(' ');
+                out.push_str(selector.trim());
+            }
         }
         out.push_str(" {");
         out.push_str(declarations);
@@ -486,15 +523,33 @@ mod tests {
     }
 
     #[test]
-    fn syntax_css_carries_both_palettes() {
+    fn syntax_css_carries_every_palette() {
         let css = Renderer::syntax_css();
         for scope in [
             "@media (prefers-color-scheme: light)",
             "@media (prefers-color-scheme: dark)",
             LIGHT_CHOSEN,
             DARK_CHOSEN,
+            CATPPUCCIN_CHOSEN,
+            GRUVBOX_CHOSEN,
         ] {
             assert!(css.contains(scope), "missing {scope}");
+        }
+    }
+
+    /// Four themes that happen to colour the same scopes would pass every other
+    /// test here while being the same colours four times over. Each palette has
+    /// to bring rules the one before it did not.
+    #[test]
+    fn every_palette_is_a_different_set_of_colours() {
+        let themes = two_face::theme::extra();
+        let all = [LIGHT_THEME, DARK_THEME, CATPPUCCIN_THEME, GRUVBOX_THEME]
+            .map(|name| theme_css(&themes, name));
+
+        for (index, one) in all.iter().enumerate() {
+            for other in &all[index + 1..] {
+                assert_ne!(one, other, "two palettes are the same theme");
+            }
         }
     }
 
@@ -507,17 +562,18 @@ mod tests {
         let print = css.find("@media print").expect("no print block");
 
         // The rules it has to beat are the ones written before it.
-        assert!(css.find(DARK_CHOSEN).expect("no dark rules") < print);
-        for scope in [DARK_BY_DEFAULT, DARK_CHOSEN] {
+        for scope in DARK_CHOSEN_ALL {
+            assert!(css.find(scope).expect("no {scope} rules") < print);
+        }
+        for scope in [&[BY_DEFAULT], DARK_CHOSEN_ALL].concat() {
             assert!(css[print..].contains(scope), "print misses {scope}");
         }
 
-        // The colours under it have to be the light theme's. Anything the dark
-        // theme alone emits would mean the wrong palette was scoped.
-        let light = scope(
-            &theme_css(&two_face::theme::extra(), LIGHT_THEME),
-            DARK_CHOSEN,
-        );
+        // The colours under it have to be the light theme's. Anything one of the
+        // dark themes alone emits would mean the wrong palette was scoped.
+        let mut printed = vec![BY_DEFAULT];
+        printed.extend_from_slice(DARK_CHOSEN_ALL);
+        let light = scope(&theme_css(&two_face::theme::extra(), LIGHT_THEME), &printed);
         assert!(
             css[print..].contains(light.trim_end()),
             "print is not the light theme"
@@ -545,21 +601,37 @@ mod tests {
     #[test]
     fn both_dark_palettes_declare_the_same_tokens() {
         let css = include_str!("assets/style.css");
-        let by_default = declarations(css, DARK_BY_DEFAULT);
+        let by_default = declarations(css, BY_DEFAULT);
         let chosen = declarations(css, DARK_CHOSEN);
 
         assert!(by_default.len() > 10, "{by_default:?}");
         assert_eq!(by_default, chosen);
     }
 
-    /// A diagram is drawn once per palette and the stylesheet picks one, which
-    /// only works if both ways of arriving at dark say the same thing. The two
-    /// are written out by hand, exactly as the palettes above them are.
+    /// The light palette is the unconditional `:root`, so a token a later
+    /// palette forgets is not a missing colour -- it is the light one showing
+    /// through, which reads as a single wrong element rather than as a mistake.
+    /// Only the names are compared; the values are the whole point of a palette.
     #[test]
-    fn both_dark_palettes_swap_the_diagram_the_same_way() {
+    fn every_palette_declares_the_same_tokens() {
+        let css = include_str!("assets/style.css");
+        let light = tokens(css, ":root {");
+
+        assert!(light.len() > 10, "{light:?}");
+
+        for selector in [BY_DEFAULT, DARK_CHOSEN, CATPPUCCIN_CHOSEN, GRUVBOX_CHOSEN] {
+            assert_eq!(tokens(css, selector), light, "{selector} is missing tokens");
+        }
+    }
+
+    /// A diagram is drawn once per lightness and the stylesheet picks one, which
+    /// only works if every way of arriving at a dark page says the same thing.
+    /// They are written out by hand, exactly as the palettes above them are.
+    #[test]
+    fn every_dark_palette_swaps_the_diagram_the_same_way() {
         let css = include_str!("assets/style.css");
 
-        for selector in [DARK_BY_DEFAULT, DARK_CHOSEN] {
+        for selector in DARK_CHOSEN_ALL {
             for rule in [
                 format!("{selector} .diagram-light {{ display: none; }}"),
                 format!("{selector} .diagram-dark {{ display: block; }}"),
@@ -569,21 +641,93 @@ mod tests {
         }
     }
 
-    /// The theme button carries a moon and a sun and the stylesheet shows one,
-    /// exactly as a diagram carries both its palettes. Miss one of the two ways
-    /// of arriving at dark and the button offers to do what it has just done.
+    /// The menu is the only way to reach a palette with a pointer, and the
+    /// stylesheet is the only thing that gives one colours. A palette in one and
+    /// not the other is either an entry that changes nothing or colours nobody
+    /// can ask for.
+    ///
+    /// The first two entries are the two that have no block of their own, and
+    /// the menu has to open with them in that order: following the system is the
+    /// absence of a palette, and light is the unconditional `:root` every other
+    /// palette overrides. Everything after them is a block, and every block is
+    /// there.
     #[test]
-    fn both_dark_palettes_swap_the_theme_icon_the_same_way() {
-        let css = include_str!("assets/style.css");
+    fn the_theme_menu_offers_every_palette_the_stylesheet_declares() {
+        let offered = menu_themes(include_str!("assets/shell.html"));
+        let declared = declared_themes(include_str!("assets/style.css"));
 
-        for selector in [DARK_BY_DEFAULT, DARK_CHOSEN] {
-            for rule in [
-                format!("{selector} #bar-theme .on-light {{ display: none; }}"),
-                format!("{selector} #bar-theme .on-dark {{ display: block; }}"),
-            ] {
-                assert!(css.contains(&rule), "the stylesheet is missing {rule}");
-            }
-        }
+        assert_eq!(offered[..2], ["system", "light"], "{offered:?}");
+
+        let mut named = offered[2..].to_vec();
+        named.sort();
+        assert_eq!(named, declared, "the menu and the palettes have drifted");
+    }
+
+    /// The order is load-bearing twice over: it is the order D walks, and
+    /// `openThemeMenu` uses the position in `THEMES` to decide which entry to
+    /// focus. Written out in both files, so the two can drift into a menu that
+    /// opens on the wrong row and a key that walks it in a different order from
+    /// the one the reader is looking at.
+    #[test]
+    fn the_menu_and_the_page_script_agree_on_the_order() {
+        let js = include_str!("assets/app.js");
+        let list = &js[js.find("var THEMES = [").expect("no THEMES")..];
+        let list = &list[..list.find(']').expect("the list closes")];
+
+        let declared: Vec<String> = list
+            .match_indices('"')
+            .step_by(2)
+            .filter_map(|(at, _)| list[at + 1..].split('"').next())
+            .map(str::to_owned)
+            .collect();
+
+        assert_eq!(declared, menu_themes(include_str!("assets/shell.html")));
+    }
+
+    /// The landing page rebuilds the window's bar and offers the same palettes
+    /// from its own corner, and it is the copy nobody working on the viewer ever
+    /// has open. A palette added here and forgotten there is a page quietly
+    /// describing an older program -- the same thing
+    /// the_landing_page_lists_every_shortcut guards for the keys.
+    #[test]
+    fn the_landing_page_offers_the_same_themes() {
+        assert_eq!(
+            menu_themes(include_str!("../docs/index.html")),
+            menu_themes(include_str!("assets/shell.html")),
+            "the page and the window offer different palettes"
+        );
+    }
+
+    /// The palettes the menu in shell.html offers, in the order it offers them.
+    fn menu_themes(shell: &str) -> Vec<String> {
+        let menu = &shell[shell.find("id=\"theme-menu\"").expect("no theme menu")..];
+        let menu = &menu[..menu.find("</div>").expect("the menu closes")];
+
+        menu.match_indices("value=\"")
+            .filter_map(|(at, tag)| menu[at + tag.len()..].split('"').next())
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// The palettes the stylesheet declares, which is every one but the light
+    /// palette -- that one is the unconditional `:root` and has no name.
+    fn declared_themes(css: &str) -> Vec<String> {
+        css.match_indices(":root[data-theme=\"")
+            .filter_map(|(at, tag)| css[at + tag.len()..].split('"').next())
+            .map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    /// The names of the custom properties a rule sets, sorted.
+    fn tokens(css: &str, selector: &str) -> Vec<String> {
+        declarations(css, selector)
+            .iter()
+            .filter_map(|line| line.split(':').next())
+            .filter(|name| name.starts_with("--"))
+            .map(str::to_owned)
+            .collect()
     }
 
     /// The two drawings of a diagram are told apart by a class name that app.js
@@ -632,18 +776,26 @@ mod tests {
 
     #[test]
     fn scoping_prefixes_every_selector_in_a_list() {
-        let scoped = scope(".hl-a, .hl-b .hl-c {\n color: red;\n}\n", ":root[x]");
+        let scoped = scope(".hl-a, .hl-b .hl-c {\n color: red;\n}\n", &[":root[x]"]);
         assert_eq!(
             scoped.trim(),
             ":root[x] .hl-a, :root[x] .hl-b .hl-c {\n color: red;\n}"
         );
     }
 
+    /// What `@media print` leans on: one copy of the light theme covering every
+    /// palette it has to talk a printer out of, rather than one copy each.
+    #[test]
+    fn scoping_takes_more_than_one_prefix_at_a_time() {
+        let scoped = scope(".hl-a {\n color: red;\n}\n", &[".x", ".y"]);
+        assert_eq!(scoped.trim(), ".x .hl-a, .y .hl-a {\n color: red;\n}");
+    }
+
     #[test]
     fn scoping_drops_the_generated_comment() {
         let scoped = scope(
             "/*\n * theme \"X\"\n */\n\n.hl-a {\n color: red;\n}\n",
-            ".s",
+            &[".s"],
         );
         assert!(!scoped.contains("theme"), "{scoped}");
         assert!(scoped.starts_with(".s .hl-a {"), "{scoped}");

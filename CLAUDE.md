@@ -92,10 +92,10 @@ Each of these is load-bearing. The comment above it says the same thing at more 
 | Relative URLs become absolute at render time, raw HTML included | `src/render.rs:71`, `:245` | the webview flattens `../` and the image is never found |
 | Attach the webview through the GTK vbox, not a raw handle | `src/main.rs:495` | wry refuses a native Wayland session outright |
 | Keep `Access` and `Modify(Metadata)` out of the watcher | `src/watcher.rs:57` | rendering opens the file, which is reported as a change, forever |
-| Scope both palettes; `@media print` comes last | `src/render.rs:106` | one stray token in one language; a printout in pale colours |
+| Scope every palette; `@media print` comes last | `src/render.rs:121` | one stray token in one language; a printout in pale colours |
 | Fill in only the standard handles Windows left empty | `src/main.rs:308` | `mark --version > out.txt` prints to the console and leaves the file empty |
 | `#split` keeps `min-height: 0` under the bar | `src/assets/style.css:279` | a flex item will not shrink below its content, so the window scrolls instead of the document |
-| Draw every diagram once per palette; the stylesheet picks one | `src/assets/app.js:32`, `src/assets/style.css:583` | mermaid bakes its colours into the SVG, so `d` would need a redraw and a dark page would print dark |
+| Draw every diagram once light and once dark; the stylesheet picks one | `src/assets/app.js:38`, `src/assets/style.css:701` | mermaid bakes its colours into the SVG, so `d` would need a redraw and a dark page would print dark |
 
 Two more are there because `render.unsafe = true` lets documents bring their own HTML: the
 Content Security Policy in `src/assets/shell.html` (`default-src 'none'`,
@@ -109,7 +109,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 44 tests: 25 in render.rs, 9 in protocol.rs, 10 in main.rs
+cargo test          # 49 tests: 30 in render.rs, 9 in protocol.rs, 10 in main.rs
 cargo clippy
 cargo run -- examples/README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package
@@ -185,8 +185,9 @@ see Ground rules.
 | A new servable file type | `SERVABLE` in `src/protocol.rs` — a security decision |
 | A new comrak extension | `Renderer::new` in `src/render.rs`, styling in `src/assets/style.css`, plus a test |
 | A newer KaTeX | `src/assets/katex/README.md` has the commands, the three properties the bundle has to keep, and the fonts to re-fetch |
-| Colours or typography | `src/assets/style.css`, both copies of the dark palette |
-| A different syntax theme | `LIGHT_THEME` / `DARK_THEME` in `src/render.rs` |
+| Colours or typography | `src/assets/style.css`, every palette that declares the token -- `every_palette_declares_the_same_tokens` fails otherwise -- and both copies of the dark one |
+| A new theme | a `:root[data-theme="..."]` block in `src/assets/style.css` with every token the light `:root` has -> the diagram and `@media print` selector lists further down the same file -> a constant and an arm in `syntax_css` in `src/render.rs` -> an entry in `#theme-menu` in `src/assets/shell.html` and in `THEMES` in `src/assets/app.js`, in the same order -> the same palette and the same menu entry in `docs/style.css` and `docs/index.html`, plus the list in the page's pre-paint script. Three tests hold the ends together: `the_theme_menu_offers_every_palette_the_stylesheet_declares`, `the_landing_page_offers_the_same_themes` and `every_palette_declares_the_same_tokens` |
+| A different syntax theme | the `*_THEME` constants in `src/render.rs`, one per palette |
 | A new embedded asset | the `ASSETS` table in `src/protocol.rs` (`include_bytes!`), or `PACKED` beside it if it is big enough to be worth storing in gzip |
 | A newer mermaid | `src/assets/mermaid/README.md` has the commands and the two properties the bundle has to keep (no `eval`, no fetching) for the CSP to stand |
 | The icon | `assets/mark.svg`, then regenerate `mark.ico` and `mark.png` with the commands in `assets/README.md` — `build.rs` and `windows/mark.iss` both read the `.ico` |

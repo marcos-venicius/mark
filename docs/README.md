@@ -9,9 +9,12 @@ That is the only step, and it is the repository owner's to take.
 
 Notes for whoever changes it next:
 
-- The palette is the app's own, copied token for token from
-  `src/assets/style.css`, dark palette written out twice for the same reason it
-  is there. A colour changed in the app should be carried across by eye.
+- The palettes are the app's own, copied token for token from
+  `src/assets/style.css` -- light, dark, Catppuccin Mocha and Gruvbox Dark, with
+  the dark one written out twice for the same reason it is there. Each carries a
+  `--syn-*` set as well, which the app has no use for: there is no syntect here,
+  so the code in the mock is highlighted by hand, once per palette. A colour
+  changed in the app should be carried across by eye.
 - The two `woff2` faces are the `latin` subsets from `src/assets/fonts/`. The
   `latin-ext` ones are not here: `@font-face` carries a `unicode-range`, so a
   glyph outside it falls back to the stack rather than going missing.
@@ -25,5 +28,10 @@ Notes for whoever changes it next:
   service -- the same rule the window keeps with its Content Security Policy.
 - `docs/**` is in the `paths-ignore` of `.github/workflows/windows.yml`, so a
   change here does not rebuild the `.exe` or move the `latest` tag.
-- Two tests in `src/main.rs` guard what this page repeats from elsewhere: the
-  shortcut table and the file types the installers claim.
+- Three tests guard what this page repeats from elsewhere: the shortcut table
+  and the file types the installers claim, both in `src/main.rs`, and the list of
+  palettes in the corner, which `the_landing_page_offers_the_same_themes` in
+  `src/render.rs` reads straight out of `index.html` and compares against the
+  window's own menu. The five names in the pre-paint script in the `<head>` are a
+  fourth copy, and the only one nothing checks -- it runs before `app.js`
+  arrives, so it cannot read the list from there.

@@ -12,6 +12,9 @@
   var help = document.getElementById("help");
   var helpCard = document.getElementById("help-card");
   var helpClose = document.getElementById("help-close");
+  var themeButton = document.getElementById("bar-theme");
+  var themeMenu = document.getElementById("theme-menu");
+  var themeItems = themeMenu.getElementsByTagName("button");
   var barName = document.getElementById("bar-name");
   var barBack = document.getElementById("bar-back");
   var barForward = document.getElementById("bar-forward");
@@ -30,11 +33,16 @@
   var tocChoice = null;
   var spy = null;
 
-  // Every ```mermaid fence is drawn once per palette. The colours mermaid uses
-  // end up inside the SVG it produces, so a theme cannot be a stylesheet matter
-  // the way it is for the syntax colours unless both drawings are on the page
-  // and the stylesheet picks one -- which is also what keeps a printout from
-  // being a dark diagram on white paper.
+  // Every ```mermaid fence is drawn twice. The colours mermaid uses end up inside
+  // the SVG it produces, so a theme cannot be a stylesheet matter the way it is
+  // for the syntax colours unless both drawings are on the page and the
+  // stylesheet picks one -- which is also what keeps a printout from being a
+  // dark diagram on white paper.
+  //
+  // Twice, not once per palette: Catppuccin and Gruvbox are dark pages, and the
+  // dark drawing reads correctly on both. A drawing of their own would be a
+  // third and a fourth render of every fence on the page, for a difference
+  // nobody would name without the two side by side.
   var DIAGRAM_PALETTES = [
     { theme: "default", className: "diagram-light" },
     { theme: "dark", className: "diagram-dark" },
@@ -50,6 +58,14 @@
   var generation = 0;
 
   var THEME_KEY = "mark.theme";
+
+  // Every palette a reader can pick, in the order D walks them. "system" is the
+  // absence of the attribute rather than a value of it, which is what lets the
+  // media queries in style.css go on following the desktop while the window is
+  // open, for nothing. Every other name is a :root[data-theme=...] block there
+  // and a scope render.rs gives syntax colours to; the order is this one because
+  // the menu is written out in it too.
+  var THEMES = ["system", "light", "dark", "catppuccin-mocha", "gruvbox-dark"];
 
   function send(message) {
     window.ipc.postMessage(JSON.stringify(message));
@@ -68,34 +84,101 @@
     }
   }
 
-  function applyStoredTheme() {
-    var stored = storedTheme();
-    if (stored === "light" || stored === "dark") document.documentElement.dataset.theme = stored;
+  // What the reader chose, which is not the same as what is on screen: with
+  // "system" the answer is still "system", and the desktop decides the rest.
+  // The menu ticks the choice, because that is the thing pressing an entry sets.
+  function currentTheme() {
+    return document.documentElement.dataset.theme || "system";
   }
 
-  function shownTheme() {
-    return (
-      document.documentElement.dataset.theme ||
-      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-    );
-  }
+  function setTheme(name) {
+    if (name === "system") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = name;
 
-  function toggleTheme() {
-    var next = shownTheme() === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
     try {
-      localStorage.setItem(THEME_KEY, next);
+      if (name === "system") localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, name);
     } catch (e) {
       // Not being able to remember the choice is no reason to refuse it.
     }
+
+    markTheme();
   }
 
-  function followSystemTheme() {
-    delete document.documentElement.dataset.theme;
-    try {
-      localStorage.removeItem(THEME_KEY);
-    } catch (e) {}
+  // The tick itself is drawn by the stylesheet off aria-checked, so this is the
+  // only place the menu and the attribute have to be kept in step.
+  function markTheme() {
+    var chosen = currentTheme();
+    var index;
+    for (index = 0; index < themeItems.length; index += 1) {
+      themeItems[index].setAttribute("aria-checked", String(themeItems[index].value === chosen));
+    }
   }
+
+  // D walks the whole list rather than flipping between two of it, so no palette
+  // is reachable only with a pointer.
+  function cycleTheme() {
+    var at = THEMES.indexOf(currentTheme());
+    setTheme(THEMES[(at + 1) % THEMES.length]);
+  }
+
+  // The list is the validation. Anything else in storage -- a name from a
+  // version that offered a palette this one does not, or a key someone else
+  // wrote -- leaves the system in charge rather than stamping the root with a
+  // value no stylesheet answers to. Index 0 is "system", which is stored as
+  // nothing at all, so a stored "system" is discarded by the same test.
+  function applyStoredTheme() {
+    var stored = storedTheme();
+    if (THEMES.indexOf(stored) > 0) document.documentElement.dataset.theme = stored;
+    markTheme();
+  }
+
+  function openThemeMenu() {
+    themeMenu.hidden = false;
+    themeButton.setAttribute("aria-expanded", "true");
+    // The entry in use, so the arrows start from where the reader already is.
+    themeItems[Math.max(0, THEMES.indexOf(currentTheme()))].focus();
+  }
+
+  function closeThemeMenu() {
+    if (themeMenu.hidden) return;
+    themeMenu.hidden = true;
+    themeButton.setAttribute("aria-expanded", "false");
+    page.focus();
+  }
+
+  function toggleThemeMenu() {
+    if (themeMenu.hidden) openThemeMenu();
+    else closeThemeMenu();
+  }
+
+  // Delegated, so shell.html stays the only place the palettes are written down.
+  // The entries have no children, so the target is the button or it is the
+  // padding around one.
+  themeMenu.addEventListener("click", function (event) {
+    if (event.target.tagName !== "BUTTON") return;
+    setTheme(event.target.value);
+    closeThemeMenu();
+  });
+
+  // Enter and space press a button on their own; only the arrows need saying.
+  themeMenu.addEventListener("keydown", function (event) {
+    var step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+    if (!step) return;
+
+    event.preventDefault();
+    var at = Array.prototype.indexOf.call(themeItems, document.activeElement);
+    var next = (at + step + themeItems.length) % themeItems.length;
+    themeItems[next].focus();
+  });
+
+  // Anywhere else on the page closes it. The button's own click is excluded or
+  // this would undo the press that opened the menu, which bubbles here after it.
+  document.addEventListener("click", function (event) {
+    if (themeMenu.hidden) return;
+    if (themeMenu.contains(event.target) || themeButton.contains(event.target)) return;
+    closeThemeMenu();
+  });
 
   // ------------------------------------------------------------- rendering
 
@@ -726,7 +809,7 @@
   });
   press("bar-toc", toggleToc);
   press("bar-wide", toggleWide);
-  press("bar-theme", toggleTheme);
+  press("bar-theme", toggleThemeMenu);
   press("bar-find", function () {
     if (find.hidden) openFind();
     else closeFind();
@@ -751,6 +834,7 @@
     if (key === "Escape") {
       event.preventDefault();
       if (!help.hidden) closeHelp();
+      else if (!themeMenu.hidden) closeThemeMenu();
       else if (!find.hidden) closeFind();
       else send({ type: "quit" });
       return;
@@ -772,6 +856,11 @@
       }
       return;
     }
+
+    // The theme menu is not modal, but d under an open one would walk the
+    // palettes while the menu went on ticking the entry it opened with. Its own
+    // handler has already had the arrows by the time this runs.
+    if (!themeMenu.hidden) return;
 
     if (mod) {
       switch (key) {
@@ -829,11 +918,11 @@
     }
     if (key === "d") {
       event.preventDefault();
-      return toggleTheme();
+      return cycleTheme();
     }
     if (key === "D") {
       event.preventDefault();
-      return followSystemTheme();
+      return setTheme("system");
     }
     if (key === "Home") {
       event.preventDefault();

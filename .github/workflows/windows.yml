@@ -5,12 +5,21 @@ name: windows
 on:
   push:
     branches: [main]
+    # None of these reaches the .exe, and building for one of them is not
+    # merely wasted: the release is rewritten in place, so a typo fixed in a
+    # sentence would delete and recreate "latest" and move the tag onto a
+    # commit that changed nothing in it. A push touching one of these *and*
+    # something else still builds, which is the behaviour wanted.
     paths-ignore:
-      - README.md
-      - FUTURE.md
-      # The landing page. Nothing under docs/ reaches the binary, and without
-      # this line a stylesheet tweak would delete and recreate the "latest"
-      # release, moving the tag onto a commit that changed nothing in it.
+      # Every Markdown file at the root is prose about the program rather than
+      # part of it -- README, FUTURE, CLAUDE, and whatever comes next. A `*`
+      # stops at a `/`, so the READMEs beside the bundled assets are untouched
+      # by this and a change to one of those still builds.
+      - '*.md'
+      - LICENCE
+      - LICENSE
+      # Neither the git plumbing nor the landing page GitHub Pages serves.
+      - .gitignore
       - docs/**
   workflow_dispatch:
 

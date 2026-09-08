@@ -24,14 +24,18 @@
 
 <link rel="stylesheet" href="style.css">
 
-<!-- Before the first paint, not in app.js: a reader who chose dark would
+<!-- Before the first paint, not in app.js: a reader who chose a palette would
      otherwise get a white page for as long as it takes the stylesheet and the
      script to arrive. Absent attribute means follow the system, which the
-     media query already handles without any of this. -->
+     media query already handles without any of this. The list is repeated here
+     rather than read from app.js because app.js has not arrived yet; a name
+     outside it -- from a version of this page that offered a palette this one
+     does not -- leaves the system in charge. -->
 <script>
   try {
     var t = localStorage.getItem("mark.site.theme");
-    if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+    if (["light", "dark", "catppuccin-mocha", "gruvbox-dark"].indexOf(t) >= 0)
+      document.documentElement.dataset.theme = t;
   } catch (e) { /* storage disabled: the system palette is a fine answer */ }
 </script>
 </head>
@@ -52,10 +56,21 @@
       <a href="https://github.com/marcos-venicius/mark">GitHub</a>
     </nav>
 
-    <button id="theme" class="icon-button" type="button" title="Light or dark" aria-label="Switch between light and dark" aria-pressed="false">
-      <svg class="on-light" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-      <svg class="on-dark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-    </button>
+    <!-- The same five the window offers, in the same order and under the same
+         names, because they are the same palettes. -->
+    <div class="theme-picker">
+      <button id="theme" class="icon-button" type="button" title="Theme" aria-label="Theme" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" style="fill:currentColor;stroke:none"/></svg>
+      </button>
+
+      <div id="theme-menu" role="menu" aria-labelledby="theme" hidden>
+        <button type="button" role="menuitemradio" value="system" aria-checked="true">System</button>
+        <button type="button" role="menuitemradio" value="light" aria-checked="false">Light</button>
+        <button type="button" role="menuitemradio" value="dark" aria-checked="false">Dark</button>
+        <button type="button" role="menuitemradio" value="catppuccin-mocha" aria-checked="false">Catppuccin Mocha</button>
+        <button type="button" role="menuitemradio" value="gruvbox-dark" aria-checked="false">Gruvbox Dark</button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -132,10 +147,7 @@
 
         <div class="bar-group bar-right">
           <span class="bar-icon" title="Print, or save as PDF (Ctrl P)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6"/><path d="M7 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7z"/></svg></span>
-          <span class="bar-icon" title="Light or dark (D)">
-            <svg class="on-light" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-            <svg class="on-dark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-          </span>
+          <span class="bar-icon" title="Theme (D)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" style="fill:currentColor;stroke:none"/></svg></span>
           <span class="bar-icon" title="Help (?)">?</span>
         </div>
       </div>
@@ -367,10 +379,12 @@
 
       <article class="card">
         <span class="card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" style="fill:currentColor;stroke:none"/></svg></span>
-        <h3>Light and dark</h3>
+        <h3>Five themes</h3>
         <p>
-          Follows the system and switches with it while the window is open.
-          <kbd>D</kbd> picks one outright and it is remembered between runs.
+          Light, dark, Catppuccin Mocha and Gruvbox Dark, or the system, which it
+          follows and switches with while the window is open. <kbd>D</kbd> walks
+          them and the choice is remembered between runs. The syntax colours
+          change with the page.
         </p>
       </article>
 
@@ -527,7 +541,7 @@
       <div class="key-row"><span class="combo"><kbd>Enter</kbd><span class="sep">/</span><kbd>Shift</kbd><kbd>Enter</kbd></span><span class="what">Next, previous match</span></div>
       <div class="key-row"><span class="combo"><kbd>T</kbd></span><span class="what">Toggle the table of contents</span></div>
       <div class="key-row"><span class="combo"><kbd>Z</kbd></span><span class="what">Widen the document to the window</span></div>
-      <div class="key-row"><span class="combo"><kbd>D</kbd></span><span class="what">Switch between light and dark</span></div>
+      <div class="key-row"><span class="combo"><kbd>D</kbd></span><span class="what">Cycle through the themes</span></div>
       <div class="key-row"><span class="combo"><kbd>Shift</kbd><kbd>D</kbd></span><span class="what">Go back to following the system</span></div>
       <div class="key-row"><span class="combo"><kbd>Alt</kbd><kbd>←</kbd><span class="sep">/</span><kbd>→</kbd></span><span class="what">Go back and forward between documents</span></div>
       <div class="key-row"><span class="combo"><kbd>Home</kbd><span class="sep">/</span><kbd>End</kbd></span><span class="what">Top, bottom</span></div>

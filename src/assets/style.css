@@ -37,8 +37,14 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* Every colour lives here as a custom property. Adding a dark palette later is a
-   block of overrides, not a rewrite of the stylesheet. */
+/* Every colour lives here as a custom property, and every other palette is a
+   block of overrides rather than a rewrite of the stylesheet.
+
+   This one is unconditional, which is what makes it the floor: a palette below
+   that forgets a token does not lose a colour, it inherits this one, and the
+   result is a single light-looking element on a dark page. That is what
+   every_palette_declares_the_same_tokens in render.rs is for, and it is why
+   nothing but colours lives in this block. */
 :root {
   --bg: #ffffff;
   --sidebar-bg: #fbfbfc;
@@ -61,16 +67,21 @@
   --warning: #9a6700;
   --caution: #cf222e;
 
+  color-scheme: light;
+}
+
+/* Everything on the root element that is not a colour, kept out of the palettes
+   so that a palette can be compared against another for completeness. */
+:root {
   --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono",
     "Liberation Mono", Menlo, Consolas, monospace;
 
   /* Read twice: by the bar itself, and by the find bar, which floats and would
-     otherwise open underneath it. Not a colour, so it stays out of the palettes. */
+     otherwise open underneath it. */
   --bar-height: 2.4rem;
 
-  color-scheme: light;
   font-size: 16.5px;
 }
 
@@ -79,9 +90,14 @@
    overriding it, and the reader picking dark outright -- cannot be folded into
    one selector, because one of them is a media query. Keep the blocks identical;
    render.rs scopes the syntax colours to these same two selectors. Nothing below
-   this point knows which palette is in play. */
+   this point knows which palette is in play.
+
+   The first selector tests for the attribute rather than for a value of it.
+   :not([data-theme="light"]) was the same thing while light and dark were the
+   only two palettes, and is wrong now: it matches Catppuccin and Gruvbox as
+   well, which would land two palettes on the page at once. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     --bg: #0f1116;
     --sidebar-bg: #0b0d11;
     --surface: #171a21;
@@ -128,6 +144,63 @@
   --important: #b787f0;
   --warning: #d4a72c;
   --caution: #ff7b72;
+
+  color-scheme: dark;
+}
+
+/* Catppuccin Mocha, from the palette the project publishes. One copy, not two:
+   no system asks for this by itself, so it is only ever reached by name and the
+   media query above has nothing to say about it. The syntax colours that go with
+   it are the Catppuccin Mocha bat theme, scoped to this same selector by
+   render.rs. */
+:root[data-theme="catppuccin-mocha"] {
+  --bg: #1e1e2e;              /* base */
+  --sidebar-bg: #181825;      /* mantle */
+  --surface: #313244;         /* surface0 */
+  --surface-strong: #45475a;  /* surface1 */
+  --border: #313244;
+  --border-strong: #45475a;
+  --text: #cdd6f4;            /* text */
+  --text-soft: #bac2de;       /* subtext1 */
+  --muted: #a6adc8;           /* subtext0 */
+  --link: #89b4fa;            /* blue */
+  --accent: #cba6f7;          /* mauve */
+  --shadow: 0 6px 24px rgba(17, 17, 27, 0.55);
+  --selection: rgba(137, 180, 250, 0.26);
+  --backdrop: rgba(17, 17, 27, 0.62);
+
+  --note: #89b4fa;
+  --tip: #a6e3a1;             /* green */
+  --important: #cba6f7;
+  --warning: #f9e2af;         /* yellow */
+  --caution: #f38ba8;         /* red */
+
+  color-scheme: dark;
+}
+
+/* Gruvbox dark, medium contrast, with the harder background for the sidebar the
+   way the original uses bg0_h. */
+:root[data-theme="gruvbox-dark"] {
+  --bg: #282828;              /* bg0 */
+  --sidebar-bg: #1d2021;      /* bg0_h */
+  --surface: #32302f;         /* bg0_s */
+  --surface-strong: #3c3836;  /* bg1 */
+  --border: #3c3836;
+  --border-strong: #504945;   /* bg2 */
+  --text: #ebdbb2;            /* fg1 */
+  --text-soft: #d5c4a1;       /* fg2 */
+  --muted: #a89984;           /* fg4 */
+  --link: #83a598;            /* blue */
+  --accent: #fe8019;          /* orange */
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  --selection: rgba(131, 165, 152, 0.26);
+  --backdrop: rgba(29, 32, 33, 0.62);
+
+  --note: #83a598;
+  --tip: #b8bb26;             /* green */
+  --important: #d3869b;       /* purple */
+  --warning: #fabd2f;         /* yellow */
+  --caution: #fb4934;         /* red */
 
   color-scheme: dark;
 }
@@ -256,21 +329,57 @@ body {
   white-space: nowrap;
 }
 
-/* A moon on a light page and a sun on a dark one: the button shows what pressing
-   it would give. Both drawings are in the markup and the stylesheet picks one,
-   which is what .diagram-light and .diagram-dark do further down, for the same
-   reason -- deciding in the page would mean listening for the system palette
-   changing under an open window, which the media query already does for free. */
-#bar-theme .on-light { display: block; }
-#bar-theme .on-dark { display: none; }
+/* The button used to carry a moon and a sun, and the stylesheet showed whichever
+   said what pressing it would give. It opens a menu now, so it promises nothing
+   and one drawing is the honest number: which palette is in use is what the
+   ticked entry in the menu is for. */
+#bar-theme[aria-expanded="true"] { color: var(--accent); }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) #bar-theme .on-light { display: none; }
-  :root:not([data-theme="light"]) #bar-theme .on-dark { display: block; }
+/* Anchored under the button rather than in the flow, so opening it does not move
+   the document. Same trick as #find, and the same reason it reads --bar-height:
+   the bar is the only thing above it. */
+#theme-menu {
+  position: fixed;
+  z-index: 10;
+  top: calc(var(--bar-height) + 0.4rem);
+  right: 0.75rem;
+  min-width: 11rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--sidebar-bg);
+  box-shadow: var(--shadow);
 }
 
-:root[data-theme="dark"] #bar-theme .on-light { display: none; }
-:root[data-theme="dark"] #bar-theme .on-dark { display: block; }
+#theme-menu button {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.34rem 0.5rem;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+#theme-menu button:hover,
+#theme-menu button:focus-visible { background: var(--surface-strong); }
+
+#theme-menu button[aria-checked="true"] { color: var(--accent); }
+
+/* The tick is drawn by the stylesheet rather than written into the markup, so
+   app.js only ever has aria-checked to keep straight. It holds its width when
+   empty, or the label of the chosen entry would sit further right than the rest. */
+#theme-menu button::before {
+  width: 0.9em;
+  content: "";
+}
+
+#theme-menu button[aria-checked="true"]::before { content: "\2713"; }
 
 /* The bar is one row of the window and this is the rest of it. The min-height is
    load-bearing: a flex item will not shrink below its content without it, so
@@ -569,14 +678,19 @@ pre[data-lang]::before {
 
 /* --------------------------------------------------------------- diagrams */
 
-/* Every ```mermaid fence is on the page twice, drawn once per palette, because
+/* Every ```mermaid fence is on the page twice, drawn once per lightness, because
    mermaid writes its colours into the SVG: which one a reader sees is settled
    here rather than at render time, and switching theme costs nothing.
 
-   These are the same four ways of arriving at a palette that render.rs scopes
-   the syntax colours to. One list changed without the other is a white diagram
-   on a dark page. The @media print block at the foot of this file is the fifth,
-   and comes last so it wins. */
+   Twice, not once per palette: Catppuccin and Gruvbox are dark pages and the
+   dark drawing reads correctly on both. A drawing of their own would be a third
+   and a fourth render of every fence for a diagram nobody would call wrong
+   without the two side by side.
+
+   The selectors are the ones render.rs scopes the syntax colours to. One list
+   changed without the other is a white diagram on a dark page. The @media print
+   block at the foot of this file is the last of them, and comes last so it
+   wins. */
 
 .diagram {
   margin: 1.6em 0;
@@ -593,12 +707,16 @@ pre[data-lang]::before {
 .diagram-dark { display: none; }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .diagram-light { display: none; }
-  :root:not([data-theme="light"]) .diagram-dark { display: block; }
+  :root:not([data-theme]) .diagram-light { display: none; }
+  :root:not([data-theme]) .diagram-dark { display: block; }
 }
 
 :root[data-theme="dark"] .diagram-light { display: none; }
 :root[data-theme="dark"] .diagram-dark { display: block; }
+:root[data-theme="catppuccin-mocha"] .diagram-light { display: none; }
+:root[data-theme="catppuccin-mocha"] .diagram-dark { display: block; }
+:root[data-theme="gruvbox-dark"] .diagram-light { display: none; }
+:root[data-theme="gruvbox-dark"] .diagram-dark { display: block; }
 
 /* Said above the fence mermaid refused, which app.js leaves where it was: the
    text someone wrote is more use than a gap where a diagram should be. */
@@ -854,16 +972,19 @@ tbody tr:nth-child(even) { background: var(--surface); }
    away also leaves #split holding a single item, and a flex item does not break
    across pages, so it goes back to being an ordinary block.
 
-   The dark palette has to be undone rather than merely allowed to print, since
+   A dark palette has to be undone rather than merely allowed to print, since
    printers drop backgrounds by default: left alone it arrives as the pale grey
    text meant for a near-black page, on white. The variables are set again with
    the same selectors that set them in the first place, placed later in the file
    so the tie in specificity is broken by order. render.rs does the same for the
-   syntax colours. */
+   syntax colours. Every palette but the light one is listed here, so a palette
+   added above and forgotten here is a printout in its own colours. */
 @media print {
   :root,
+  :root:not([data-theme]),
   :root[data-theme="dark"],
-  :root:not([data-theme="light"]) {
+  :root[data-theme="catppuccin-mocha"],
+  :root[data-theme="gruvbox-dark"] {
     --bg: #ffffff;
     --sidebar-bg: #ffffff;
     --surface: #f6f7f9;
@@ -899,6 +1020,7 @@ tbody tr:nth-child(even) { background: var(--surface); }
   }
 
   #bar,
+  #theme-menu,
   #toc,
   #find,
   #help,
@@ -946,12 +1068,16 @@ tbody tr:nth-child(even) { background: var(--surface); }
      ones above, repeated here and later in the file, which is the same tie
      broken by order that the palette block uses. */
   :root .diagram-light,
+  :root:not([data-theme]) .diagram-light,
   :root[data-theme="dark"] .diagram-light,
-  :root:not([data-theme="light"]) .diagram-light { display: block; }
+  :root[data-theme="catppuccin-mocha"] .diagram-light,
+  :root[data-theme="gruvbox-dark"] .diagram-light { display: block; }
 
   :root .diagram-dark,
+  :root:not([data-theme]) .diagram-dark,
   :root[data-theme="dark"] .diagram-dark,
-  :root:not([data-theme="light"]) .diagram-dark { display: none; }
+  :root[data-theme="catppuccin-mocha"] .diagram-dark,
+  :root[data-theme="gruvbox-dark"] .diagram-dark { display: none; }
 
   p { orphans: 2; widows: 2; }
 
