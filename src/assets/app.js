@@ -17,6 +17,7 @@
   var barForward = document.getElementById("bar-forward");
   var barToc = document.getElementById("bar-toc");
   var barFind = document.getElementById("bar-find");
+  var barWide = document.getElementById("bar-wide");
 
   var BASE_FONT_SIZE = 16.5;
   var ZOOM_STEPS = [0.75, 0.85, 0.92, 1, 1.1, 1.25, 1.4, 1.6, 1.85];
@@ -559,6 +560,21 @@
     syncBar();
   }
 
+  // ------------------------------------------------------------------ width
+
+  // The reading column is a measure rather than a limit, and the stylesheet
+  // lifts it for whatever carries data-wide. Nothing is remembered between
+  // windows: the theme is a fact about the reader, but whether the measure is
+  // the wrong shape is a fact about the document that happens to be open.
+  function toggleWide() {
+    var root = document.documentElement;
+    if (root.hasAttribute("data-wide")) root.removeAttribute("data-wide");
+    else root.setAttribute("data-wide", "");
+    syncBar();
+    // Every line has just been rewrapped, so every heading is somewhere else.
+    updateSpy();
+  }
+
   // ------------------------------------------------------------------ links
 
   document.addEventListener("click", function (event) {
@@ -675,11 +691,12 @@
     barForward.disabled = !state.forward;
   }
 
-  // The two things in the bar that open something and leave it open. Everything
-  // else there happens once and has no state to show.
+  // The three things in the bar that turn something on and leave it on.
+  // Everything else there happens once and has no state to show.
   function syncBar() {
     barToc.setAttribute("aria-pressed", String(!toc.hidden));
     barFind.setAttribute("aria-pressed", String(!find.hidden));
+    barWide.setAttribute("aria-pressed", String(document.documentElement.hasAttribute("data-wide")));
   }
 
   // A click leaves the focus on the button, where the next Enter or space would
@@ -708,6 +725,7 @@
     send({ type: "print" });
   });
   press("bar-toc", toggleToc);
+  press("bar-wide", toggleWide);
   press("bar-theme", toggleTheme);
   press("bar-find", function () {
     if (find.hidden) openFind();
@@ -804,6 +822,10 @@
     if (key === "t") {
       event.preventDefault();
       return toggleToc();
+    }
+    if (key === "z") {
+      event.preventDefault();
+      return toggleWide();
     }
     if (key === "d") {
       event.preventDefault();

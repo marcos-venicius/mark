@@ -339,6 +339,15 @@ body {
   padding: 2.6rem 3rem 8rem;
 }
 
+/* 46rem is a measure, not a limit: it is about as much prose as an eye tracks
+   from the end of one line to the start of the next. A document that is mostly
+   wide tables, long code or diagrams is the case where that measure is the
+   wrong shape, so `z` lifts it for the whole document rather than leaving the
+   reader to widen the one block that needed it. The stamp goes on the root
+   element, beside the theme, because both are choices about the window and not
+   about the document that happens to be in it. */
+:root[data-wide] #content { max-width: none; }
+
 /* ------------------------------------------------------------- typography */
 
 #content > *:first-child { margin-top: 0; }

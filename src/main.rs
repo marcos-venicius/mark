@@ -54,6 +54,7 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("/ or Ctrl F", "Find in page"),
     ("Enter or Shift Enter", "Next, previous match"),
     ("t", "Toggle the table of contents"),
+    ("z", "Widen the document to the window"),
     ("d", "Switch between light and dark"),
     ("Shift D", "Go back to following the system"),
     ("Alt Left/Right", "Go back and forward between documents"),

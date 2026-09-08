@@ -159,6 +159,7 @@ practical way to see it — a document opened from Explorer never passes a promp
 | <kbd>/</kbd> or <kbd>Ctrl</kbd> <kbd>F</kbd> | Find in page |
 | <kbd>Enter</kbd> / <kbd>Shift</kbd> <kbd>Enter</kbd> | Next, previous match |
 | <kbd>T</kbd> | Show or hide the table of contents |
+| <kbd>Z</kbd> | Widen the document to the window, and back |
 | <kbd>D</kbd> | Switch between light and dark |
 | <kbd>Shift</kbd> <kbd>D</kbd> | Go back to following the system |
 | <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd> | Back, forward |
