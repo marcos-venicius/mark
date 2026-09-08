@@ -10,6 +10,8 @@ no frontend build step, about 4.6 MB with the stylesheet, the page script, two f
 the mermaid renderer and KaTeX compiled in. Nothing is written to disk at runtime. Around
 the binary there is desktop integration on both systems: `install.sh` on Linux, and a
 per-user Inno Setup installer that the Windows workflow builds as a second artefact.
+And `docs/`, the landing page GitHub Pages serves, which reaches the binary nowhere;
+`docs/README.md` says how it is published and what it repeats from where.
 
 ## Ground rules
 
@@ -107,7 +109,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 42 tests: 25 in render.rs, 9 in protocol.rs, 8 in main.rs
+cargo test          # 44 tests: 25 in render.rs, 9 in protocol.rs, 10 in main.rs
 cargo clippy
 cargo run -- examples/README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package
@@ -141,12 +143,13 @@ Things written down nowhere else:
   `rustup target add x86_64-pc-windows-msvc` and then `cargo check` on a scratch crate
   holding the same code. The full crate does not cross-check -- `onig_sys` compiles C.
 - Tests live inline in `#[cfg(test)] mod tests`. There is no `tests/` directory, and
-  `watcher.rs` has none. The eight in `main.rs` all guard something written down twice or
+  `watcher.rs` has none. The ten in `main.rs` all guard something written down twice or
   unreachable from Linux: the shortcut table (rendered into the terminal and the window,
   and the window's copy cannot be checked from a terminal), the file types the two
   installers claim -- against `MARKDOWN_EXTENSIONS` and against each other -- the sizes
-  inside the `.ico`, the bar's buttons against the ids `app.js` wires up, and the print
-  rules that keep the bar off the paper.
+  inside the `.ico`, the bar's buttons against the ids `app.js` wires up, the print
+  rules that keep the bar off the paper, and the two lists `docs/index.html` repeats,
+  the shortcuts and the file types.
 - Building on Linux needs `libwebkit2gtk-4.1-dev` and `libsoup-3.0-dev`; Rust 1.85 or newer.
 
 ## Style
@@ -178,7 +181,7 @@ see Ground rules.
 
 | Task | Files |
 | --- | --- |
-| A new keyboard shortcut | `SHORTCUTS` in `src/main.rs` (the terminal text and the help panel both follow) -> `src/assets/app.js` keydown -> `UserEvent` and `decode_message` in `src/main.rs`, if it needs the filesystem -> the README table -> a button in `#bar` if it is worth pointing at, with the key in its tooltip |
+| A new keyboard shortcut | `SHORTCUTS` in `src/main.rs` (the terminal text and the help panel both follow) -> `src/assets/app.js` keydown -> `UserEvent` and `decode_message` in `src/main.rs`, if it needs the filesystem -> the README table -> the list in `docs/index.html`, which `the_landing_page_lists_every_shortcut` insists on -> a button in `#bar` if it is worth pointing at, with the key in its tooltip |
 | A new servable file type | `SERVABLE` in `src/protocol.rs` — a security decision |
 | A new comrak extension | `Renderer::new` in `src/render.rs`, styling in `src/assets/style.css`, plus a test |
 | A newer KaTeX | `src/assets/katex/README.md` has the commands, the three properties the bundle has to keep, and the fonts to re-fetch |
@@ -189,7 +192,8 @@ see Ground rules.
 | The icon | `assets/mark.svg`, then regenerate `mark.ico` and `mark.png` with the commands in `assets/README.md` — `build.rs` and `windows/mark.iss` both read the `.ico` |
 | The Windows installer | `windows/mark.iss`, and the `Build the installer` step in `.github/workflows/windows.yml` |
 | The Linux desktop entry | `linux/mark.desktop` and `linux/mark.xml`, installed by `install.sh` and removed by `uninstall.sh` |
-| A new file association | both `windows/mark.iss` and `linux/mark.xml`, never one alone — `both_platforms_claim_the_same_file_types` fails otherwise — and it has to be an extension `MARKDOWN_EXTENSIONS` already lists |
+| A new file association | both `windows/mark.iss` and `linux/mark.xml`, never one alone — `both_platforms_claim_the_same_file_types` fails otherwise — and it has to be an extension `MARKDOWN_EXTENSIONS` already lists, named in `docs/index.html` too |
+| The landing page | `docs/index.html`, `docs/style.css`, `docs/app.js` — no build step; `docs/README.md` says why the palette is duplicated there |
 | Anything in FUTURE.md | pick up the note that is already there; it says what is missing and what it costs |
 
 ## Out of scope, on purpose

@@ -1,0 +1,1154 @@
+/* The landing page for mark, served from GitHub Pages.
+
+   The palette below is the app's own, copied token for token from
+   src/assets/style.css. That is deliberate: the site and the window it is
+   selling should not be two designs that merely resemble each other, and a
+   value changed in the app can be carried across here by eye. Everything the
+   page needs beyond the app's tokens is grouped separately and named --site-*.
+
+   No build step, no framework, no external request. The two fonts are served
+   from fonts/ beside this file for the same reason the binary carries them:
+   the page should read the same on a machine that has neither. */
+
+/* ------------------------------------------------------------------ fonts */
+
+/* Only the latin subsets are here, not the latin-ext ones the binary also
+   carries. The unicode-range is what makes that safe: a glyph outside the
+   range falls back to the stack rather than going missing, and an English
+   page never asks for one. 88 KB instead of 189 KB. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/inter-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("fonts/jetbrains-mono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* --------------------------------------------------------------- palettes */
+
+:root {
+  --bg: #ffffff;
+  --sidebar-bg: #fbfbfc;
+  --surface: #f6f7f9;
+  --surface-strong: #eef0f3;
+  --border: #e4e7eb;
+  --border-strong: #d3d8de;
+  --text: #1f2328;
+  --text-soft: #4a515a;
+  --muted: #6e7781;
+  --link: #1f6feb;
+  --accent: #1f6feb;
+  --shadow: 0 6px 24px rgba(20, 24, 31, 0.12);
+  --selection: rgba(31, 111, 235, 0.18);
+  --backdrop: rgba(20, 24, 31, 0.34);
+
+  --note: #1f6feb;
+  --tip: #1a7f37;
+  --important: #8250df;
+  --warning: #9a6700;
+  --caution: #cf222e;
+
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono",
+    "Liberation Mono", Menlo, Consolas, monospace;
+
+  --bar-height: 2.4rem;
+
+  /* Beyond the app's palette. The syntax colours stand in for syntect, which
+     is not here: the mock's code is highlighted by hand, once per palette. */
+  --site-nav-bg: rgba(255, 255, 255, 0.82);
+  --site-glow: rgba(31, 111, 235, 0.13);
+  --site-frame: 0 24px 70px -28px rgba(20, 24, 31, 0.42);
+  --site-on-accent: #ffffff;
+
+  --syn-key: #cf222e;
+  --syn-str: #0a3069;
+  --syn-com: #6e7781;
+  --syn-fn: #8250df;
+  --syn-num: #0550ae;
+  --syn-type: #953800;
+
+  color-scheme: light;
+  font-size: 16.5px;
+}
+
+/* The dark palette, written twice on purpose, exactly as the app writes it.
+   The two conditions it answers to -- the system asking for dark with nothing
+   overriding it, and the reader picking dark outright -- cannot be folded into
+   one selector, because one of them is a media query. Keep the blocks
+   identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1116;
+    --sidebar-bg: #0b0d11;
+    --surface: #171a21;
+    --surface-strong: #1f232b;
+    --border: #262b34;
+    --border-strong: #363c47;
+    --text: #e2e5ea;
+    --text-soft: #b6bdc7;
+    --muted: #8b939f;
+    --link: #6aa9ff;
+    --accent: #6aa9ff;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+    --selection: rgba(106, 169, 255, 0.26);
+    --backdrop: rgba(0, 0, 0, 0.62);
+
+    --note: #6aa9ff;
+    --tip: #4ac26b;
+    --important: #b787f0;
+    --warning: #d4a72c;
+    --caution: #ff7b72;
+
+    --site-nav-bg: rgba(15, 17, 22, 0.82);
+    --site-glow: rgba(106, 169, 255, 0.13);
+    --site-frame: 0 24px 70px -28px rgba(0, 0, 0, 0.8);
+    --site-on-accent: #0b0d11;
+
+    --syn-key: #ff7b72;
+    --syn-str: #a5d6ff;
+    --syn-com: #8b939f;
+    --syn-fn: #d2a8ff;
+    --syn-num: #79c0ff;
+    --syn-type: #ffa657;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1116;
+  --sidebar-bg: #0b0d11;
+  --surface: #171a21;
+  --surface-strong: #1f232b;
+  --border: #262b34;
+  --border-strong: #363c47;
+  --text: #e2e5ea;
+  --text-soft: #b6bdc7;
+  --muted: #8b939f;
+  --link: #6aa9ff;
+  --accent: #6aa9ff;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  --selection: rgba(106, 169, 255, 0.26);
+  --backdrop: rgba(0, 0, 0, 0.62);
+
+  --note: #6aa9ff;
+  --tip: #4ac26b;
+  --important: #b787f0;
+  --warning: #d4a72c;
+  --caution: #ff7b72;
+
+  --site-nav-bg: rgba(15, 17, 22, 0.82);
+  --site-glow: rgba(106, 169, 255, 0.13);
+  --site-frame: 0 24px 70px -28px rgba(0, 0, 0, 0.8);
+  --site-on-accent: #0b0d11;
+
+  --syn-key: #ff7b72;
+  --syn-str: #a5d6ff;
+  --syn-com: #8b939f;
+  --syn-fn: #d2a8ff;
+  --syn-num: #79c0ff;
+  --syn-type: #ffa657;
+
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------- base */
+
+* { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  /* The nav is sticky, so an anchor would otherwise land under it. */
+  scroll-padding-top: 5rem;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* A long word or a wide mock must never widen the page itself. */
+  overflow-x: hidden;
+}
+
+::selection { background: var(--selection); }
+
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, kbd, pre { font-family: var(--mono); font-variant-ligatures: none; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+h1, h2, h3 {
+  margin: 0;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  line-height: 1.18;
+}
+
+p { margin: 0; }
+
+.wrap {
+  width: 100%;
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+section { padding: 5.5rem 0; }
+
+.section-head { max-width: 40rem; margin-bottom: 2.8rem; }
+
+.eyebrow {
+  margin-bottom: 0.7rem;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 620;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.section-head h2 { font-size: clamp(1.7rem, 3.4vw, 2.3rem); }
+
+.section-head p {
+  margin-top: 0.9rem;
+  color: var(--text-soft);
+  font-size: 1.03rem;
+}
+
+/* -------------------------------------------------------------------- nav */
+
+#nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid var(--border);
+  background: var(--site-nav-bg);
+  backdrop-filter: saturate(180%) blur(12px);
+}
+
+#nav .wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  height: 3.5rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text);
+  font-size: 1.02rem;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+}
+
+.brand:hover { text-decoration: none; }
+.brand img { width: 24px; height: 24px; border-radius: 6px; }
+
+.nav-links {
+  display: flex;
+  gap: 1.3rem;
+  margin-left: auto;
+}
+
+.nav-links a {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.nav-links a:hover { color: var(--text); text-decoration: none; }
+
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover { background: var(--surface-strong); color: var(--text); }
+.icon-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* A moon on a light page and a sun on a dark one: the button shows what
+   pressing it would give. Both drawings are in the markup and the stylesheet
+   picks one, which is how the app does it -- and it is also what keeps the
+   page correct before any script has run. The mock's bar carries the same
+   two drawings, so the selectors take it along. */
+#theme .on-light,
+.window-bar .on-light { display: block; }
+#theme .on-dark,
+.window-bar .on-dark { display: none; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) #theme .on-light,
+  :root:not([data-theme="light"]) .window-bar .on-light { display: none; }
+  :root:not([data-theme="light"]) #theme .on-dark,
+  :root:not([data-theme="light"]) .window-bar .on-dark { display: block; }
+}
+
+:root[data-theme="dark"] #theme .on-light,
+:root[data-theme="dark"] .window-bar .on-light { display: none; }
+:root[data-theme="dark"] #theme .on-dark,
+:root[data-theme="dark"] .window-bar .on-dark { display: block; }
+
+/* ------------------------------------------------------------------- hero */
+
+#hero {
+  position: relative;
+  padding: 5.5rem 0 3rem;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* A single wash of the accent behind the headline. Cheap, themed by a token,
+   and the only decoration on the page that is not information. */
+#hero::before {
+  content: "";
+  position: absolute;
+  top: -18rem;
+  left: 50%;
+  width: 70rem;
+  height: 40rem;
+  margin-left: -35rem;
+  background: radial-gradient(closest-side, var(--site-glow), transparent);
+  pointer-events: none;
+}
+
+#hero .wrap { position: relative; }
+
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.6rem;
+  padding: 0.28rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+
+.hero-tag b { color: var(--text); font-weight: 620; }
+
+#hero h1 {
+  max-width: 20ch;
+  margin: 0 auto;
+  font-size: clamp(2.3rem, 6vw, 3.8rem);
+  letter-spacing: -0.035em;
+}
+
+.hero-sub {
+  max-width: 44rem;
+  margin: 1.4rem auto 0;
+  color: var(--text-soft);
+  font-size: clamp(1rem, 2vw, 1.16rem);
+}
+
+.hero-sub code {
+  padding: 0.12em 0.3em;
+  border-radius: 5px;
+  background: var(--surface-strong);
+  color: var(--text);
+  font-size: 0.86em;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.7rem;
+  margin-top: 2.2rem;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.62rem 1.15rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.93rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.button:hover {
+  border-color: var(--muted);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--site-on-accent);
+}
+
+.button.primary:hover { filter: brightness(1.07); }
+.button.primary svg { stroke-width: 2; }
+
+/* The command line, quotable and copyable, in the same monospace the window
+   uses. It says in four words what the paragraph above says in forty. */
+.hero-command {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 2rem;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 0.88rem;
+}
+
+.hero-command .prompt { color: var(--muted); user-select: none; }
+.hero-command .cmd { color: var(--text); }
+
+.hero-facts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1.6rem;
+  margin-top: 2.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.hero-facts span { display: inline-flex; align-items: center; gap: 0.45rem; }
+.hero-facts span::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* --------------------------------------------------------- the window mock
+
+   Not a screenshot. A screenshot is a picture of one palette taken on one
+   machine at one moment; this is the window rebuilt out of the app's own
+   markup and the app's own tokens, so it is light on a light page and dark on
+   a dark one, sharp at any zoom, and weighs nothing at all. Its bar is copied
+   from src/assets/shell.html -- the same buttons, the same 16px strokes, in
+   the same order. */
+
+#showcase { padding-top: 1.5rem; }
+
+.panes {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-bottom: 1.6rem;
+}
+
+.panes button {
+  padding: 0.4rem 0.95rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.panes button:hover { color: var(--text); }
+
+.panes button[aria-selected="true"] {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.window {
+  max-width: 62rem;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: var(--site-frame);
+}
+
+.window-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  height: var(--bar-height);
+  padding: 0 0.55rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  user-select: none;
+}
+
+.bar-group { display: flex; align-items: center; gap: 0.1rem; }
+.bar-right { justify-content: flex-end; }
+
+.bar-sep {
+  width: 1px;
+  height: 1.1rem;
+  margin: 0 0.35rem;
+  background: var(--border);
+}
+
+.window-bar span[role="button"],
+.window-bar .bar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.window-bar .bar-icon.off { opacity: 0.35; }
+.window-bar .bar-icon.on { color: var(--accent); }
+
+.window-bar svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bar-name {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-body { display: flex; height: 27rem; }
+
+.window-toc {
+  flex: 0 0 13rem;
+  padding: 1.2rem 0;
+  border-right: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  user-select: none;
+}
+
+.window-toc p {
+  margin: 0 0 0.8rem 1.3rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 620;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.window-toc a {
+  display: block;
+  padding: 0.16rem 1.3rem;
+  border-left: 2px solid transparent;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
+.window-toc a.here {
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+
+.window-toc a.sub { padding-left: 2.1rem; font-size: 0.81rem; }
+
+.window-page {
+  flex: 1 1 auto;
+  padding: 1.9rem 2.4rem;
+  overflow: hidden;
+  font-size: 0.9rem;
+}
+
+.window-page > .pane { display: none; }
+.window-page > .pane.shown { display: block; }
+
+.window-page h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.45rem;
+  letter-spacing: -0.025em;
+}
+
+.window-page h4 {
+  margin: 1.4rem 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 620;
+}
+
+.window-page p { margin: 0.7rem 0; color: var(--text); }
+.window-page p.lead { color: var(--text-soft); }
+
+.window-page a { color: var(--link); }
+
+.window-page :not(pre) > code {
+  padding: 0.12em 0.24em;
+  border-radius: 5px;
+  background: var(--surface-strong);
+  font-size: 0.855em;
+}
+
+/* The code block, badge and copy button as the app draws them, down to the
+   notched corners: the label on the left, the button opposite. */
+.mock-code {
+  position: relative;
+  margin: 1.1rem 0;
+}
+
+.mock-code pre {
+  margin: 0;
+  padding: 1.9rem 1.15rem 1rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 0.8rem;
+  line-height: 1.58;
+}
+
+.mock-code pre::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0.15rem 0.7rem;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 9px 0 8px 0;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mock-code .copy {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 4.6rem;
+  padding: 0.15rem 0.7rem;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 9px 0 8px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.k { color: var(--syn-key); }
+.s { color: var(--syn-str); }
+.c { color: var(--syn-com); font-style: italic; }
+.f { color: var(--syn-fn); }
+.n { color: var(--syn-num); }
+.t { color: var(--syn-type); }
+
+.mock-alert {
+  margin: 1.1rem 0;
+  padding: 0.8rem 1rem;
+  border-left: 3px solid var(--tone, var(--border-strong));
+  border-radius: 0 8px 8px 0;
+  background: var(--surface);
+}
+
+.mock-alert.note { --tone: var(--note); }
+.mock-alert.tip { --tone: var(--tip); }
+.mock-alert p { margin: 0; color: var(--text-soft); font-size: 0.86rem; }
+
+.mock-alert .title {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--tone);
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.mock-table {
+  width: 100%;
+  margin: 1.1rem 0;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.mock-table th, .mock-table td {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.mock-table th { background: var(--surface); font-weight: 620; }
+.mock-table tbody tr:nth-child(even) { background: var(--surface); }
+
+/* The diagram pane. A real mermaid diagram bakes its colours into the SVG and
+   has to be drawn once per palette; this one is drawn with the tokens, so it
+   follows the page for nothing. */
+.mock-diagram {
+  margin: 1.4rem 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.mock-diagram svg { display: block; width: 100%; height: auto; }
+.mock-diagram .box { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
+.mock-diagram .label { fill: var(--text); font-family: var(--sans); font-size: 12px; }
+.mock-diagram .edge { fill: none; stroke: var(--border-strong); stroke-width: 1.5; }
+.mock-diagram .edge-label { fill: var(--muted); font-family: var(--sans); font-size: 10px; }
+
+/* The maths pane. KaTeX lays a formula out as HTML and leaves the colour to
+   the text around it, which is why one drawing is right in both palettes --
+   and why this stand-in can be plain markup. */
+.mock-math {
+  margin: 1.3rem 0;
+  padding: 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-family: "Times New Roman", Times, serif;
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+.mock-math i { font-family: inherit; }
+.mock-math sup, .mock-math sub { font-size: 0.7em; }
+
+/* Two stacked halves and a rule between them. vertical-align centres it on the
+   line rather than hanging it below, which is what keeps the "=" beside it at
+   the height of the bar and not at the height of the numerator. */
+.frac {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: middle;
+  margin: 0 0.2em;
+  line-height: 1.15;
+  text-align: center;
+}
+
+/* Inline in a sentence, a fraction has to fit the line it interrupts, or the
+   paragraph opens a gap around it and rather undermines the claim being made
+   in it. Smaller and tighter is all it takes. */
+.window-page p .frac { font-size: 0.78em; line-height: 1.02; }
+
+.frac span:first-child { border-bottom: 1px solid currentColor; padding: 0 0.3em; }
+.frac span:last-child { padding: 0 0.3em; }
+
+/* The radical's bar, which a real KaTeX draws for itself. */
+.mock-math .rad { border-top: 1px solid currentColor; padding: 0 0.08em; }
+
+.window-note {
+  max-width: 62rem;
+  margin: 1.1rem auto 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------- features */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  padding: 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  transition: border-color 0.14s ease, transform 0.14s ease;
+}
+
+.card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+
+.card .card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--accent);
+}
+
+.card svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.card h3 { margin-bottom: 0.35rem; font-size: 1rem; }
+.card p { color: var(--text-soft); font-size: 0.9rem; line-height: 1.6; }
+.card code {
+  padding: 0.1em 0.28em;
+  border-radius: 5px;
+  background: var(--surface-strong);
+  font-size: 0.85em;
+}
+
+/* ---------------------------------------------------------------- install */
+
+#install { background: var(--sidebar-bg); border-block: 1px solid var(--border); }
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.4rem;
+}
+
+.tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.93rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.tabs button:hover { color: var(--text); }
+
+.tabs button[aria-selected="true"] {
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tabs svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tab-panel[hidden] { display: none; }
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1.2rem;
+}
+
+.step {
+  padding: 1.3rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.step h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.7rem;
+  font-size: 0.98rem;
+}
+
+.step h3 .num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 620;
+}
+
+.step p { color: var(--text-soft); font-size: 0.89rem; }
+.step p + .shell { margin-top: 0.9rem; }
+
+/* A copyable command. The button says what it did rather than only doing it,
+   the way the app's own copy button does. */
+.shell {
+  position: relative;
+  margin: 0.9rem 0 0;
+  /* The right padding is the copy button's seat: a long line would otherwise
+     run under it, and an apt line with two package names is long. Wrapping
+     rather than scrolling for the same reason -- a command half off the edge
+     of a card is a command nobody reads before running. */
+  padding: 0.85rem 4.4rem 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.83rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.shell .prompt { color: var(--muted); user-select: none; }
+.shell .c { color: var(--syn-com); }
+
+.copy-button {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  min-width: 3.6rem;
+  padding: 0.16rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.12s ease;
+}
+
+.shell:hover .copy-button,
+.copy-button:focus-visible,
+.copy-button.said { opacity: 1; }
+
+.copy-button:hover { color: var(--text); }
+.copy-button.said { color: var(--tip); border-color: var(--tip); }
+
+.downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.note-line {
+  margin-top: 1.6rem;
+  padding: 0.9rem 1.1rem;
+  border-left: 3px solid var(--note);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 0.88rem;
+}
+
+.note-line b { color: var(--text); font-weight: 620; }
+
+/* -------------------------------------------------------------- shortcuts */
+
+.keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 0 2.5rem;
+}
+
+.key-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.62rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.key-row .combo { flex: 0 0 11rem; display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.key-row .what { color: var(--text-soft); font-size: 0.92rem; }
+
+kbd {
+  display: inline-block;
+  min-width: 1.5rem;
+  padding: 0.08rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.key-row .sep { color: var(--muted); font-size: 0.78rem; }
+
+/* ------------------------------------------------------------ how it works */
+
+#how { background: var(--sidebar-bg); border-block: 1px solid var(--border); }
+
+.how-layout {
+  display: grid;
+  grid-template-columns: 1fr 24rem;
+  gap: 2rem;
+  align-items: start;
+}
+
+.how-list { display: grid; gap: 1rem; }
+
+.how-item {
+  padding: 1.2rem 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.how-item h3 { margin-bottom: 0.4rem; font-size: 0.98rem; }
+.how-item p { color: var(--text-soft); font-size: 0.9rem; line-height: 1.65; }
+.how-item code {
+  padding: 0.1em 0.28em;
+  border-radius: 5px;
+  background: var(--surface-strong);
+  font-size: 0.85em;
+}
+
+/* The four modules, straight from the README. It is the whole program. */
+.tree {
+  margin: 0;
+  padding: 1.3rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  line-height: 1.75;
+}
+
+.tree b { color: var(--text); font-weight: 600; }
+.tree .c { color: var(--muted); }
+
+/* ----------------------------------------------------------------- footer */
+
+footer {
+  padding: 3.5rem 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.87rem;
+}
+
+.foot-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.6rem;
+}
+
+.foot-links { display: flex; flex-wrap: wrap; gap: 1.3rem; }
+.foot-links a { color: var(--text-soft); }
+.foot-links a:hover { color: var(--text); text-decoration: none; }
+
+.credits { max-width: 46rem; line-height: 1.7; }
+.credits a { color: var(--text-soft); }
+
+/* ------------------------------------------------------------- responsive */
+
+@media (max-width: 900px) {
+  section { padding: 4rem 0; }
+  .nav-links { display: none; }
+  .how-layout { grid-template-columns: 1fr; }
+  /* The sidebar is the first thing the app itself drops; the mock does the
+     same rather than shrinking the document column to a gutter. */
+  .window-toc { display: none; }
+  .window-body { height: auto; min-height: 22rem; }
+  .window-page { padding: 1.4rem 1.3rem; }
+  .panes { flex-wrap: wrap; }
+}
+
+@media (max-width: 600px) {
+  .hero-command { width: 100%; justify-content: space-between; }
+  .key-row { flex-direction: column; gap: 0.3rem; align-items: flex-start; }
+  .key-row .combo { flex: none; }
+  .button { width: 100%; justify-content: center; }
+  .downloads .button { width: auto; }
+}
+
+/* Movement is decoration here, and decoration is the first thing to go. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; animation: none !important; }
+}
+
+/* Comes last, as it does in the app: whatever the palette was on screen, a
+   printed page is black on white. */
+@media print {
+  #nav, .panes, .hero-actions, .copy-button { display: none; }
+  body { background: #fff; color: #000; }
+  .window, .card, .step, .how-item { box-shadow: none; break-inside: avoid; }
+}

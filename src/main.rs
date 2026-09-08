@@ -827,4 +827,34 @@ mod tests {
             assert!(sizes.contains(&wanted), "the icon has no {wanted} px entry");
         }
     }
+
+    /// The landing page under docs/ lists the shortcuts a third time, after
+    /// --help and the help panel, and it is the only one of the three that no
+    /// one working on the viewer ever has open. A key added to SHORTCUTS and
+    /// forgotten there is a page that quietly describes an older program.
+    #[test]
+    fn the_landing_page_lists_every_shortcut() {
+        let page = include_str!("../docs/index.html");
+
+        for (_, what) in SHORTCUTS {
+            assert!(page.contains(what), "'{what}' is missing from docs/index.html");
+        }
+    }
+
+    /// And it names the file types as well. The page promises a reader that
+    /// installing puts mark in the "Open with" menu of each of them, so a type
+    /// added to the MIME package and not to the page is a promise made about
+    /// one list and kept about another.
+    #[test]
+    fn the_landing_page_names_every_file_type_the_installers_claim() {
+        let page = include_str!("../docs/index.html");
+
+        for ext in linux_extensions() {
+            let claimed = format!(".{ext}");
+            assert!(
+                page.contains(&claimed),
+                "{claimed} is registered but docs/index.html never mentions it"
+            );
+        }
+    }
 }

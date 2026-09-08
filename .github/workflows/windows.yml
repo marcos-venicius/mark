@@ -8,6 +8,10 @@ on:
     paths-ignore:
       - README.md
       - FUTURE.md
+      # The landing page. Nothing under docs/ reaches the binary, and without
+      # this line a stylesheet tweak would delete and recreate the "latest"
+      # release, moving the tag onto a commit that changed nothing in it.
+      - docs/**
   workflow_dispatch:
 
 # The release is rewritten in place, so two pushes landing together would race to
