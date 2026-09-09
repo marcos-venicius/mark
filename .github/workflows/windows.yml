@@ -1,5 +1,5 @@
 # Builds the Windows binary on every push to main and keeps it downloadable from
-# a single unchanging link: the "latest" prerelease.
+# a single unchanging link: the "latest" release.
 name: windows
 
 on:
@@ -161,14 +161,23 @@ jobs:
       # the tag to this commit, so "latest" points at what it actually contains.
       # bash, not pwsh: "|| true" on a first run where the release does not exist
       # yet behaves the same in every shell version.
-      - name: Publish to the latest prerelease
+      #
+      # A full release rather than a prerelease: it is the only release there is,
+      # and it is what the README and the landing page send people to, so GitHub
+      # marking it "Latest" and answering /releases/latest with it is the
+      # behaviour wanted. What it is not is a version -- the tag moves, so the
+      # notes say which commit this build came from and where to read what
+      # changed. The link is to CHANGELOG.md on main rather than to a copy of it
+      # here, so it is right for whoever reads the release later.
+      - name: Publish to the latest release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest mark-windows-x64.exe mark-setup-x64.exe \
-            --prerelease \
             --target "$GITHUB_SHA" \
             --title "Latest build from main" \
-            --notes "Built from $GITHUB_SHA on $(date -u +%Y-%m-%d). This is the tip of main, not a tagged release."
+            --notes "Built from $GITHUB_SHA on $(date -u +%Y-%m-%d). This is the tip of \`main\`, rebuilt on every push, rather than a numbered version.
+
+          What changed: [CHANGELOG.md](https://github.com/marcos-venicius/mark/blob/main/CHANGELOG.md)"

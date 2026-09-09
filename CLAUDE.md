@@ -133,8 +133,8 @@ Things written down nowhere else:
   the redirected output is also the check that the inherited handle survived), reads
   the headers with `dumpbin` to catch a stray `VCRUNTIME` or `WebView2Loader` and to
   confirm the GUI subsystem, extracts the icon back out to prove `build.rs` embedded it,
-  builds `mark-setup-x64.exe` with `ISCC`, and rewrites the `latest` prerelease in place
-  with both artefacts. It does not run `cargo test`, `clippy` or `fmt`, and there is no
+  builds `mark-setup-x64.exe` with `ISCC`, and rewrites the `latest` release in place
+  with both artefacts, its notes pointing at `CHANGELOG.md` on `main`. It does not run `cargo test`, `clippy` or `fmt`, and there is no
   Linux CI at all.
 - The Windows installer and the icon cannot be built or tested here. `ISCC` is
   Windows-only, so `windows/mark.iss` is checked by CI and by the tests that read it;

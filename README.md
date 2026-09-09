@@ -61,8 +61,9 @@ cp target/release/mark ~/.local/bin/
 ```
 
 **Windows.** Download `mark-setup-x64.exe` from the
-[`latest` prerelease](https://github.com/marcos-venicius/mark/releases/tag/latest),
-which is rebuilt from `main` on every push. It installs for the current user
+[`latest` release](https://github.com/marcos-venicius/mark/releases/tag/latest),
+which is rebuilt from `main` on every push;
+[CHANGELOG.md](CHANGELOG.md) says what is in it. It installs for the current user
 only — `%LOCALAPPDATA%\Programs\mark`, no administrator prompt, an entry in the
 Start Menu, and an uninstaller in "Installed apps" that takes the registry keys
 with it.
@@ -76,7 +77,7 @@ click works from then on.
 
 The installer does not touch `PATH`. To keep using `mark file.md` from a
 terminal, add `%LOCALAPPDATA%\Programs\mark` to it, or carry on with the plain
-`mark-windows-x64.exe` from the same prerelease — a single file that needs no
+`mark-windows-x64.exe` from the same release — a single file that needs no
 installation and nothing but Windows itself.
 
 ## Usage
