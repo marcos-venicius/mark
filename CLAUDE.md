@@ -55,6 +55,13 @@ the top bar's half of that same call -- the file name, its path, and whether the
 has anywhere to go either way -- carried along with the document so that the two cannot
 arrive out of order.
 
+There is a second thing the window can be showing: nothing. `App::close` puts the
+document away and `App::show` sends the empty state down the same `setContent` call,
+so the bar and the body still cannot disagree. The history and the cursor survive a
+close untouched -- that is what the "reopen" button offers back -- and `App::current`
+returns `None` rather than indexing, which is the whole of the difference. `mark` with
+no argument starts there, which is also what `Exec=mark %f` passes from a desktop menu.
+
 Shared state is one thing: `DocDir = Arc<Mutex<PathBuf>>` (`src/render.rs:15`), the
 directory of the document on screen. The URL rewriter and the protocol handler both read
 it; `App::navigated` (`src/main.rs:440`) swaps it when the reader follows a link.
@@ -109,7 +116,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 49 tests: 30 in render.rs, 9 in protocol.rs, 10 in main.rs
+cargo test          # 51 tests: 30 in render.rs, 9 in protocol.rs, 12 in main.rs
 cargo clippy
 cargo run -- examples/README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package
@@ -143,7 +150,7 @@ Things written down nowhere else:
   `rustup target add x86_64-pc-windows-msvc` and then `cargo check` on a scratch crate
   holding the same code. The full crate does not cross-check -- `onig_sys` compiles C.
 - Tests live inline in `#[cfg(test)] mod tests`. There is no `tests/` directory, and
-  `watcher.rs` has none. The ten in `main.rs` all guard something written down twice or
+  `watcher.rs` has none. The twelve in `main.rs` all guard something written down twice or
   unreachable from Linux: the shortcut table (rendered into the terminal and the window,
   and the window's copy cannot be checked from a terminal), the file types the two
   installers claim -- against `MARKDOWN_EXTENSIONS` and against each other -- the sizes
@@ -183,6 +190,8 @@ see Ground rules.
 | --- | --- |
 | A new keyboard shortcut | `SHORTCUTS` in `src/main.rs` (the terminal text and the help panel both follow) -> `src/assets/app.js` keydown -> `UserEvent` and `decode_message` in `src/main.rs`, if it needs the filesystem -> the README table -> the list in `docs/index.html`, which `the_landing_page_lists_every_shortcut` insists on -> a button in `#bar` if it is worth pointing at, with the key in its tooltip |
 | A new servable file type | `SERVABLE` in `src/protocol.rs` — a security decision |
+| The file chooser | `pick_file` in `src/main.rs`, twice: GTK on Linux and `GetOpenFileNameW` on Windows. Neither pulls in a crate — `gtk` is already compiled by `tao` and `windows-sys` was already there. The Windows half only type-checks with the scratch-crate trick below |
+| The empty state | `#empty` in `src/assets/shell.html` -> `showEmpty` in `src/assets/app.js` -> the block in `src/assets/style.css` and its `@media print` entry -> `App::show`'s `None` arm, which fills the reopen button's label. `the_empty_state_is_wired_up` holds the three files together |
 | A new comrak extension | `Renderer::new` in `src/render.rs`, styling in `src/assets/style.css`, plus a test |
 | A newer KaTeX | `src/assets/katex/README.md` has the commands, the three properties the bundle has to keep, and the fonts to re-fetch |
 | Colours or typography | `src/assets/style.css`, every palette that declares the token -- `every_palette_declares_the_same_tokens` fails otherwise -- and both copies of the dark one |

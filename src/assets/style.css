@@ -457,6 +457,89 @@ body {
    about the document that happens to be in it. */
 :root[data-wide] #content { max-width: none; }
 
+/* --------------------------------------------------------- the empty state */
+
+/* What is on screen when there is no document: at startup with no file, and
+   after the last Esc. It fills the space the document would have had, so the
+   window does not look broken -- an empty reading column with a bar above it
+   says nothing about what to do next. */
+#empty {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 2rem;
+  text-align: center;
+  user-select: none;
+}
+
+#empty[hidden] { display: none; }
+
+#empty-icon {
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.4rem;
+  color: var(--border-strong);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#empty-message {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+#empty-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+#empty-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+#empty-actions button {
+  padding: 0.42rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+#empty-actions button:hover,
+#empty-actions button:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--surface-strong);
+}
+
+/* Reopening is the way back from an Esc nobody meant to press, so it is the
+   quieter of the two: choosing a file is the deliberate act. */
+#empty-reopen { color: var(--muted); }
+#empty-reopen[hidden] { display: none; }
+
+/* A file is over the window. Rust says so -- see setDragging in app.js -- and
+   the outline is drawn inside the edge so that it does not move the document
+   underneath it by a pixel. */
+:root[data-dragging] #page {
+  outline: 2px dashed var(--accent);
+  outline-offset: -5px;
+}
+
+:root[data-dragging] #empty-icon { color: var(--accent); }
+
 /* ------------------------------------------------------------- typography */
 
 #content > *:first-child { margin-top: 0; }
@@ -1024,6 +1107,7 @@ tbody tr:nth-child(even) { background: var(--surface); }
   #toc,
   #find,
   #help,
+  #empty,
   a.anchor { display: none !important; }
 
   #split { display: block; }

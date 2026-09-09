@@ -1276,6 +1276,7 @@ dependencies = [
  "anyhow",
  "comrak",
  "flate2",
+ "gtk",
  "libc",
  "mime_guess",
  "notify",

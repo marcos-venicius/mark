@@ -31,6 +31,13 @@ wry = "0.56"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# Nothing new is compiled: gtk is already built for this platform by tao, which
+# is where the window comes from, and Cargo.lock pins the same 0.18.2 either way.
+# Declaring it only makes the file chooser reachable -- the desktop's own dialog,
+# rather than one drawn in the page, which could not name a path anyway.
+[target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
+gtk = "0.18"
+
 # Nothing new is being pulled in: windows-sys is already compiled for Windows,
 # by notify -> walkdir -> winapi-util. The features are declarations and nothing
 # else -- Win32_Security is in the list because CreateFileW takes a pointer to a
@@ -42,6 +49,9 @@ features = [
     "Win32_Security",
     "Win32_Storage_FileSystem",
     "Win32_System_Console",
+    # GetOpenFileNameW, for the "open a file" button. comdlg32 is part of
+    # Windows; the feature is a declaration, like the four above it.
+    "Win32_UI_Controls_Dialogs",
 ]
 
 # The icon has to reach the .exe as a Win32 resource and cargo will not put it

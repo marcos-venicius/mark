@@ -321,11 +321,19 @@ mod tests {
     #[test]
     fn packed_assets_are_served_inflated() {
         for (index, (name, _, packed)) in PACKED.iter().enumerate() {
-            let response = serve(&request(&format!("/__mark__/{name}")), Path::new("/tmp"), "");
+            let response = serve(
+                &request(&format!("/__mark__/{name}")),
+                Path::new("/tmp"),
+                "",
+            );
             assert_eq!(response.status(), StatusCode::OK, "{name}");
 
             let body = response.body();
-            assert!(body.len() > packed.len() * 2, "{name}: {} bytes", body.len());
+            assert!(
+                body.len() > packed.len() * 2,
+                "{name}: {} bytes",
+                body.len()
+            );
 
             // The name without its extensions is in every one of these bundles,
             // which is as much as a byte comparison can say about a script.

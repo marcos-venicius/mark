@@ -33,6 +33,9 @@
        the machine happens to have a font that does. -->
   <header id="bar">
     <div class="bar-group">
+      <button id="bar-open" type="button" title="Open a file (Ctrl O)" aria-label="Open a file">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </button>
       <button id="bar-back" type="button" title="Back (Alt Left)" aria-label="Back" disabled>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
       </button>
@@ -83,6 +86,22 @@
 
     <div id="page">
       <main id="content"></main>
+
+      <!-- The window with nothing in it: where mark starts when it was given no
+           file, and where Esc lands once there is nothing left to dismiss.
+
+           The second button is the way back from an Esc nobody meant to press.
+           Its label is filled in from Rust, because the page is never told which
+           file it is showing -- only Rust knows what was just closed. -->
+      <div id="empty" hidden>
+        <svg id="empty-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+        <p id="empty-message">No file open</p>
+        <p id="empty-hint">Choose one below, or drag a Markdown file into the window</p>
+        <div id="empty-actions">
+          <button id="empty-open" type="button">Choose a file</button>
+          <button id="empty-reopen" type="button" hidden></button>
+        </div>
+      </div>
     </div>
   </div>
 

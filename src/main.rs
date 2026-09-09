@@ -21,7 +21,7 @@ use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
 use tao::window::{Window, WindowBuilder};
-use wry::{WebView, WebViewBuilder};
+use wry::{DragDropEvent, WebView, WebViewBuilder};
 
 use render::Renderer;
 use watcher::FileWatcher;
@@ -33,6 +33,7 @@ const BANNER: &str = "mark -- a Markdown viewer";
 const INVOCATION: &str = "\
 Usage:
   mark <file>       Open a Markdown file in a window
+  mark              Open an empty window and choose a file there
   mark --help       Show this message
   mark --version    Show the version
 
@@ -59,11 +60,17 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("Shift D", "Go back to following the system"),
     ("Alt Left/Right", "Go back and forward between documents"),
     ("Home or End", "Top, bottom"),
+    ("Ctrl O", "Open a file"),
     ("Ctrl P", "Print, or save as PDF"),
     ("Ctrl R", "Reload from disk"),
     ("? or F1", "Show this help"),
-    ("Ctrl Q or Esc", "Quit"),
+    ("Esc", "Dismiss, or close the document"),
+    ("Ctrl Q", "Quit"),
 ];
+
+/// What the window is called with nothing in it. `title_for` is "name -- mark",
+/// and with no name there is nothing for the dash to join.
+const NO_DOCUMENT_TITLE: &str = "mark";
 
 /// File types `mark` opens itself. Anything else is handed to the desktop.
 const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mkdn", "mdx", "txt"];
@@ -83,6 +90,17 @@ enum UserEvent {
     /// The reader asked for a paper copy, or for the PDF the print dialog can
     /// write instead.
     Print,
+    /// Esc with nothing left to dismiss: put the document away.
+    Close,
+    /// The empty state's second button -- the document Esc just closed.
+    Reopen,
+    /// Ask the desktop for a file to open.
+    Pick,
+    /// A file is over the window, or has stopped being. The page draws the
+    /// highlight; only Rust is told about the drag at all.
+    Dragging(bool),
+    /// A file was dropped on the window.
+    Dropped(PathBuf),
     Quit,
 }
 
@@ -102,7 +120,12 @@ fn run() -> Result<()> {
         detach();
     }
 
-    let doc_dir: render::DocDir = Arc::new(Mutex::new(parent_of(&path)));
+    // With no document there is nothing for a relative URL to be relative to
+    // yet; the first one opened sets this again.
+    let doc_dir: render::DocDir = Arc::new(Mutex::new(
+        path.as_deref()
+            .map_or_else(|| PathBuf::from("."), parent_of),
+    ));
     let renderer = Renderer::new(doc_dir.clone());
     let shell = build_shell();
 
@@ -110,7 +133,10 @@ fn run() -> Result<()> {
     let proxy = event_loop.create_proxy();
 
     let window = WindowBuilder::new()
-        .with_title(title_for(&path))
+        .with_title(
+            path.as_deref()
+                .map_or_else(|| NO_DOCUMENT_TITLE.to_string(), title_for),
+        )
         .with_inner_size(LogicalSize::new(1100.0, 820.0))
         .build(&event_loop)
         .context("could not open a window")?;
@@ -118,7 +144,8 @@ fn run() -> Result<()> {
     let webview = build_webview(&window, doc_dir.clone(), shell, proxy.clone())?;
 
     let mut app = App {
-        history: vec![path],
+        closed: path.is_none(),
+        history: path.into_iter().collect(),
         cursor: 0,
         doc_dir,
         renderer,
@@ -148,6 +175,12 @@ fn run() -> Result<()> {
             Event::UserEvent(UserEvent::Back) => app.step(-1, &proxy),
             Event::UserEvent(UserEvent::Forward) => app.step(1, &proxy),
 
+            Event::UserEvent(UserEvent::Close) => app.close(&proxy),
+            Event::UserEvent(UserEvent::Reopen) => app.reopen(&proxy),
+            Event::UserEvent(UserEvent::Pick) => app.pick(&proxy),
+            Event::UserEvent(UserEvent::Dragging(over)) => app.dragging(over),
+            Event::UserEvent(UserEvent::Dropped(path)) => app.open_path(path, &proxy),
+
             _ => {}
         }
     });
@@ -155,7 +188,8 @@ fn run() -> Result<()> {
 
 /// What the command line asked for, or `None` when the run was only a question.
 struct Invocation {
-    path: PathBuf,
+    /// The file to open, or `None` for a window that starts empty.
+    path: Option<PathBuf>,
     foreground: bool,
 }
 
@@ -182,17 +216,23 @@ fn parse_args() -> Result<Option<Invocation>> {
         }
     }
 
-    let Some(file) = file else {
-        // Being called with no file is a mistake, not a request for help, so the
-        // usage goes to stderr and the exit code says so.
-        print_err(&usage());
-        std::process::exit(2);
+    // Being called with no file is not a mistake any more: the window opens on
+    // the empty state, where a file can be chosen or dropped. That is also what
+    // the desktop entry passes, since `Exec=mark %f` has nothing to substitute
+    // when `mark` is launched from a menu rather than from a file manager.
+    //
+    // A file that is named and is not there is still an error. Opening an empty
+    // window on a typo would say nothing at all about what went wrong.
+    let path = match file {
+        Some(file) => {
+            let path = absolute(Path::new(&file));
+            if !path.is_file() {
+                bail!("'{}' is not a file", path.display());
+            }
+            Some(path)
+        }
+        None => None,
     };
-
-    let path = absolute(Path::new(&file));
-    if !path.is_file() {
-        bail!("'{}' is not a file", path.display());
-    }
     Ok(Some(Invocation { path, foreground }))
 }
 
@@ -349,6 +389,14 @@ enum Placement {
 struct App {
     history: Vec<PathBuf>,
     cursor: usize,
+    /// True while the window shows the empty state rather than a document.
+    ///
+    /// Closing leaves `history` and `cursor` exactly as they were, so reopening
+    /// what Esc just put away is this field going back to false -- and closing
+    /// from the middle of a history comes back to the middle of it. It is true
+    /// whenever `history` is empty, which is where `mark` starts when it was
+    /// given no file at all.
+    closed: bool,
     doc_dir: render::DocDir,
     renderer: Renderer,
     webview: WebView,
@@ -357,28 +405,62 @@ struct App {
 }
 
 impl App {
-    fn current(&self) -> &Path {
-        &self.history[self.cursor]
+    /// The document on screen, or `None` in the empty state.
+    fn current(&self) -> Option<&Path> {
+        if self.closed {
+            None
+        } else {
+            self.history.get(self.cursor).map(PathBuf::as_path)
+        }
     }
 
     /// Read the current file, render it, and hand the result to the page.
+    ///
+    /// The empty state goes down this same call rather than one of its own. The
+    /// bar and the document have to change together -- see the comment on
+    /// `state` below -- and closing a document changes both.
     fn show(&self, placement: Placement) {
-        let path = self.current();
-        let body = match std::fs::read_to_string(path) {
-            Ok(text) => self.renderer.render(&text),
-            Err(error) => error_page(path, &error),
+        let (body, state) = match self.current() {
+            // The bar's half of the same call. It rides along with the document
+            // rather than going down a channel of its own: both change together
+            // every time, and one message cannot arrive before the other.
+            Some(path) => {
+                let body = match std::fs::read_to_string(path) {
+                    Ok(text) => self.renderer.render(&text),
+                    Err(error) => error_page(path, &error),
+                };
+                let state = serde_json::json!({
+                    "name": file_name(path),
+                    "path": path.display().to_string(),
+                    "back": self.cursor > 0,
+                    "forward": self.cursor + 1 < self.history.len(),
+                    "empty": false,
+                    "reopen": serde_json::Value::Null,
+                });
+                (body, state)
+            }
+            // Nothing on screen, and nothing in the bar that acts on a document.
+            // Only Rust knows which file was just closed, so the label of the
+            // button offering it back travels with the rest of the state.
+            None => {
+                let state = serde_json::json!({
+                    "name": "",
+                    "path": "",
+                    "back": false,
+                    "forward": false,
+                    "empty": true,
+                    "reopen": self.history.get(self.cursor).map(|path| {
+                        serde_json::json!({
+                            "name": file_name(path),
+                            "path": path.display().to_string(),
+                        })
+                    }),
+                });
+                (String::new(), state)
+            }
         };
 
         let keep_scroll = matches!(placement, Placement::Keep);
-        // The bar's half of the same call. It rides along with the document
-        // rather than going down a channel of its own: both change together
-        // every time, and one message cannot arrive before the other.
-        let state = serde_json::json!({
-            "name": file_name(path),
-            "path": path.display().to_string(),
-            "back": self.cursor > 0,
-            "forward": self.cursor + 1 < self.history.len(),
-        });
         let script = format!(
             "window.__mark.setContent({}, {}, {})",
             serde_json::Value::from(body),
@@ -400,6 +482,11 @@ impl App {
     /// print system to offer, and saying so on a stderr that was closed at
     /// startup would not reach anyone.
     fn print(&self) {
+        // The keys still fire with the empty state on screen, where the bar's
+        // own button is disabled. A blank sheet is not what anyone asked for.
+        if self.current().is_none() {
+            return;
+        }
         let _ = self.webview.print();
     }
 
@@ -414,20 +501,88 @@ impl App {
             let _ = open::that_detached(&path);
             return;
         }
+        self.open_path(path, proxy);
+    }
+
+    /// Put a document on screen, wherever it came from: a link, the file dialog,
+    /// or something dropped on the window.
+    fn open_path(&mut self, path: PathBuf, proxy: &EventLoopProxy<UserEvent>) {
+        // The file may have gone since it was last seen -- closed a minute ago
+        // and deleted, or dropped from a window that has moved on.
         if !path.is_file() {
             return;
         }
 
-        // A new destination truncates whatever was ahead, the way a browser does.
-        self.history.truncate(self.cursor + 1);
-        if self.current() != path {
-            self.history.push(path);
-            self.cursor += 1;
+        let same = self.history.get(self.cursor).map(PathBuf::as_path) == Some(path.as_path());
+
+        // Coming back to the document that was closed is not a new destination:
+        // the cursor does not move and nothing ahead of it is thrown away, which
+        // is what makes reopening an undo. Truncating first would quietly lose
+        // the forward history of a reader who closed from the middle of one.
+        if !(self.closed && same) {
+            // Anywhere else, a new destination truncates whatever was ahead, the
+            // way a browser does. On an empty history the truncate does nothing
+            // and the push is the first entry, so the two need no telling apart.
+            self.history.truncate(self.cursor + 1);
+            if !same {
+                self.history.push(path);
+                self.cursor = self.history.len() - 1;
+            }
         }
+        self.closed = false;
         self.navigated(proxy);
     }
 
+    /// Put the document away and show the empty state.
+    ///
+    /// The history is left alone, so `reopen` has something exact to come back
+    /// to -- the entry at the cursor, wherever in the history that is.
+    fn close(&mut self, proxy: &EventLoopProxy<UserEvent>) {
+        // Esc lands here with nothing left to dismiss, and pressing it again
+        // should not be a second event with something to do.
+        if self.closed {
+            return;
+        }
+        self.closed = true;
+        self.navigated(proxy);
+    }
+
+    /// The way back from an Esc nobody meant to press.
+    ///
+    /// Down the same path as any other open, which is what makes it exact: the
+    /// entry at the cursor is the one that was closed, and `open_path` knows not
+    /// to treat coming back to it as a new destination.
+    fn reopen(&mut self, proxy: &EventLoopProxy<UserEvent>) {
+        if !self.closed {
+            return;
+        }
+        let Some(path) = self.history.get(self.cursor).cloned() else {
+            return;
+        };
+        self.open_path(path, proxy);
+    }
+
+    /// Ask the desktop for a file and open whatever comes back.
+    fn pick(&mut self, proxy: &EventLoopProxy<UserEvent>) {
+        if let Some(path) = pick_file(&self.window) {
+            self.open_path(path, proxy);
+        }
+    }
+
+    /// Tell the page that a file is over the window, or is not any more.
+    fn dragging(&self, over: bool) {
+        let script = format!(
+            "window.__mark.setDragging({})",
+            serde_json::Value::from(over)
+        );
+        let _ = self.webview.evaluate_script(&script);
+    }
+
     fn step(&mut self, delta: isize, proxy: &EventLoopProxy<UserEvent>) {
+        // The bar's arrows are disabled in the empty state, but Alt Left is not.
+        if self.closed {
+            return;
+        }
         let Some(target) = self.cursor.checked_add_signed(delta) else {
             return;
         };
@@ -438,17 +593,32 @@ impl App {
         self.navigated(proxy);
     }
 
+    /// The four things that change together when what is on screen changes --
+    /// including changing to nothing, which is why closing comes through here
+    /// too rather than repeating three of the four somewhere else.
     fn navigated(&mut self, proxy: &EventLoopProxy<UserEvent>) {
-        *self.doc_dir.lock().expect("doc dir lock") = parent_of(self.current());
-        self.window.set_title(&title_for(self.current()));
+        match self.current().map(Path::to_path_buf) {
+            Some(path) => {
+                *self.doc_dir.lock().expect("doc dir lock") = parent_of(&path);
+                self.window.set_title(&title_for(&path));
+            }
+            // `doc_dir` is left pointing where it was, deliberately: nothing on
+            // an empty page can ask for a file relative to anything, and the
+            // next document sets it before anything reads it again.
+            None => self.window.set_title(NO_DOCUMENT_TITLE),
+        }
         self.rewatch(proxy);
         self.show(Placement::Top);
     }
 
     /// Point the live-reload watcher at whichever file is now open.
     fn rewatch(&mut self, proxy: &EventLoopProxy<UserEvent>) {
+        let Some(path) = self.current().map(Path::to_path_buf) else {
+            self.watcher = None;
+            return;
+        };
         let proxy = proxy.clone();
-        self.watcher = watcher::watch(self.current(), move || {
+        self.watcher = watcher::watch(&path, move || {
             let _ = proxy.send_event(UserEvent::Changed);
         })
         .ok();
@@ -462,6 +632,7 @@ fn build_webview(
     proxy: EventLoopProxy<UserEvent>,
 ) -> Result<WebView> {
     let origin = protocol::url("");
+    let dragged = proxy.clone();
 
     let builder = WebViewBuilder::new()
         .with_custom_protocol("mark".to_string(), move |_id, request| {
@@ -472,6 +643,34 @@ fn build_webview(
             if let Some(event) = decode_message(request.body()) {
                 let _ = proxy.send_event(event);
             }
+        })
+        // Dropping is handled here rather than in the page, because this is the
+        // only side that is told where the file actually is: a drop caught in
+        // HTML gives a File object and no path. It costs the page's own drag
+        // events, which wry turns off wherever this handler is installed, so the
+        // highlight is driven from Rust too.
+        .with_drag_drop_handler(move |event| {
+            match event {
+                DragDropEvent::Enter { paths, .. } => {
+                    let _ = dragged
+                        .send_event(UserEvent::Dragging(paths.iter().any(|p| is_markdown(p))));
+                }
+                DragDropEvent::Leave => {
+                    let _ = dragged.send_event(UserEvent::Dragging(false));
+                }
+                DragDropEvent::Drop { paths, .. } => {
+                    let _ = dragged.send_event(UserEvent::Dragging(false));
+                    if let Some(path) = paths.into_iter().find(|p| is_markdown(p)) {
+                        let _ = dragged.send_event(UserEvent::Dropped(path));
+                    }
+                }
+                // Over, and whatever wry adds later: the highlight is already
+                // on, and there is nothing to do until it lands or leaves.
+                _ => {}
+            }
+            // Claim the drop. Left to itself the webview treats it as a
+            // navigation and points the window at the file it was given.
+            true
         })
         // Every link is handled in Rust, so the webview itself should never leave
         // the page it was given. Anchors stay on the same origin and are allowed.
@@ -516,12 +715,160 @@ fn attach(builder: WebViewBuilder<'_>, window: &Window) -> wry::Result<WebView> 
     builder.build(window)
 }
 
+/// Ask the desktop for a Markdown file.
+///
+/// Blocking, and deliberately so: the dialog runs a loop of its own and the
+/// answer is wanted before anything else happens. Both halves are the system's
+/// own dialog rather than anything drawn here -- a file chooser is the one piece
+/// of a program that everybody already knows how to use.
+///
+/// `None` means the reader cancelled, and nothing should change.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+fn pick_file(window: &Window) -> Option<PathBuf> {
+    use gtk::prelude::{FileChooserExt, FileExt, NativeDialogExt};
+    use tao::platform::unix::WindowExtUnix;
+
+    // Native rather than GtkFileChooserDialog: where the desktop offers a portal
+    // this is the portal's own chooser, which is the one the reader sees in
+    // every other application. Where it does not, GTK falls back to its dialog
+    // and nothing here changes.
+    let dialog = gtk::FileChooserNative::builder()
+        .title("Open a Markdown file")
+        .action(gtk::FileChooserAction::Open)
+        .accept_label("Open")
+        .cancel_label("Cancel")
+        .modal(true)
+        .build();
+    dialog.set_transient_for(Some(window.gtk_window()));
+
+    let markdown = gtk::FileFilter::new();
+    markdown.set_name(Some("Markdown"));
+    for extension in MARKDOWN_EXTENSIONS {
+        markdown.add_pattern(&format!("*.{extension}"));
+    }
+    dialog.add_filter(markdown);
+
+    // The second filter is not a formality. A document written without an
+    // extension, or with one nobody thought of, is still a document, and the
+    // chooser is the only place the reader can say so.
+    let everything = gtk::FileFilter::new();
+    everything.set_name(Some("All files"));
+    everything.add_pattern("*");
+    dialog.add_filter(everything);
+
+    // Runs a nested GTK loop. This is called from inside the tao event loop,
+    // which on this platform is that same GTK loop, so nesting is what the
+    // toolkit expects rather than something being worked around.
+    // Runs a nested GTK loop. This is called from inside the tao event loop,
+    // which on this platform is that same GTK loop, so nesting is what the
+    // toolkit expects rather than something being worked around. Everything
+    // that arrives meanwhile -- a save, an IPC message -- is queued and handed
+    // over once the reader has answered.
+    let answer = dialog.run();
+    let picked = match answer {
+        gtk::ResponseType::Accept => dialog.file().and_then(|file| file.path()),
+        _ => None,
+    };
+    // A native dialog is not a widget in the window: GTK holds it until it is
+    // told otherwise, and dropping the handle is not telling it.
+    dialog.destroy();
+    picked
+}
+
+/// The same question, asked the way Windows asks it.
+///
+/// `GetOpenFileNameW` rather than the newer `IFileOpenDialog`: the common dialog
+/// is one struct and one call against a library that is already linked, where
+/// the COM interface would be a vtable walked by hand for the same picker.
+///
+/// It pumps this window's messages while it is up, which is the thing to check
+/// before blocking here: tao buffers anything that arrives while the callback
+/// is running -- `should_buffer` is true precisely because the handler has been
+/// taken out for the duration -- and dispatches it afterwards. So nothing
+/// re-enters the closure holding the `&mut App` this was called from.
+#[cfg(windows)]
+fn pick_file(window: &Window) -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use tao::platform::windows::WindowExtWindows;
+    use windows_sys::Win32::UI::Controls::Dialogs::{
+        GetOpenFileNameW, OFN_EXPLORER, OFN_FILEMUSTEXIST, OFN_HIDEREADONLY, OFN_NOCHANGEDIR,
+        OFN_PATHMUSTEXIST, OPENFILENAMEW,
+    };
+
+    // Pairs of "what to call it" and "what to match", each terminated by a NUL,
+    // and the whole list terminated by another one.
+    let mut filter: Vec<u16> = Vec::new();
+    let patterns = MARKDOWN_EXTENSIONS
+        .iter()
+        .map(|extension| format!("*.{extension}"))
+        .collect::<Vec<_>>()
+        .join(";");
+    for part in [
+        format!("Markdown ({patterns})"),
+        patterns,
+        "All files".into(),
+        "*.*".into(),
+    ] {
+        filter.extend(part.encode_utf16());
+        filter.push(0);
+    }
+    filter.push(0);
+
+    // Not MAX_PATH: the dialog writes the answer in here and truncates to fit,
+    // and a document nested a few directories deep under a long user name is
+    // past 260 characters more often than it sounds.
+    let mut buffer = vec![0u16; 32768];
+    let mut options: OPENFILENAMEW = unsafe { std::mem::zeroed() };
+    options.lStructSize = std::mem::size_of::<OPENFILENAMEW>() as u32;
+    options.hwndOwner = window.hwnd() as _;
+    options.lpstrFilter = filter.as_ptr();
+    options.lpstrFile = buffer.as_mut_ptr();
+    options.nMaxFile = buffer.len() as u32;
+    options.nFilterIndex = 1;
+    // FILEMUSTEXIST is the point of asking -- there is nothing to render
+    // otherwise. NOCHANGEDIR is the one that is easy to leave out: without it
+    // the dialog moves the process's working directory to wherever the reader
+    // browsed, and every relative path taken afterwards resolves somewhere new.
+    options.Flags =
+        OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+
+    if unsafe { GetOpenFileNameW(&mut options) } == 0 {
+        return None;
+    }
+
+    let end = buffer.iter().position(|c| *c == 0).unwrap_or(buffer.len());
+    Some(PathBuf::from(std::ffi::OsString::from_wide(&buffer[..end])))
+}
+
+/// Everywhere else there is no dialog to ask, and the button that would open one
+/// does nothing. Dropping a file on the window still works.
+#[cfg(not(any(
+    windows,
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+)))]
+fn pick_file(_window: &Window) -> Option<PathBuf> {
+    None
+}
+
 fn decode_message(body: &str) -> Option<UserEvent> {
     let message: serde_json::Value = serde_json::from_str(body).ok()?;
     match message.get("type")?.as_str()? {
         "ready" => Some(UserEvent::Ready),
         "reload" => Some(UserEvent::Reload),
         "print" => Some(UserEvent::Print),
+        "close" => Some(UserEvent::Close),
+        "reopen" => Some(UserEvent::Reopen),
+        "pick" => Some(UserEvent::Pick),
         "quit" => Some(UserEvent::Quit),
         "back" => Some(UserEvent::Back),
         "forward" => Some(UserEvent::Forward),
@@ -713,12 +1060,105 @@ mod tests {
     /// Print rules are the one part of the stylesheet nobody sees while working
     /// on the page, and a bar of buttons across the top of a printout is only
     /// found by printing something.
+    /// The page and Rust have to agree on the words in between them, and the
+    /// only thing holding the two lists together is that they were written at
+    /// the same time. A message the page sends and Rust drops on the floor is
+    /// silent: `decode_message` returns None and nothing happens at all.
+    #[test]
+    fn every_message_the_page_sends_is_understood() {
+        let js = include_str!("assets/app.js");
+
+        let types: Vec<&str> = js
+            .match_indices("type: \"")
+            .filter_map(|(at, _)| js[at + 7..].split('"').next())
+            .collect();
+
+        assert!(types.len() > 5, "the page seems to send nothing: {types:?}");
+
+        for name in types {
+            // `open` is the one that carries something with it, and a message
+            // without its href is rightly refused.
+            let body = if name == "open" {
+                format!("{{\"type\":\"{name}\",\"href\":\"mark://x\"}}")
+            } else {
+                format!("{{\"type\":\"{name}\"}}")
+            };
+            assert!(
+                decode_message(&body).is_some(),
+                "app.js sends {name} and decode_message drops it"
+            );
+        }
+    }
+
+    /// The empty state is markup in one file, behaviour in another and a look in
+    /// a third, and nothing but this test notices when one of the three is
+    /// renamed. It is `every_bar_button_is_wired_up` again, for the ids that
+    /// test does not scan.
+    #[test]
+    fn the_empty_state_is_wired_up() {
+        let shell = include_str!("assets/shell.html");
+        let js = include_str!("assets/app.js");
+        let css = include_str!("assets/style.css");
+
+        let ids: Vec<&str> = shell
+            .match_indices("id=\"empty")
+            .filter_map(|(at, _)| shell[at + 4..].split('"').next())
+            .collect();
+
+        assert!(ids.len() > 3, "the empty state is nearly gone: {ids:?}");
+
+        // An id is there to be styled or to be wired up, and one that is
+        // neither is markup nobody is using any more.
+        for id in ids {
+            assert!(
+                css.contains(&format!("#{id}")) || js.contains(&format!("\"{id}\"")),
+                "{id} is in the page and neither the stylesheet nor app.js uses it"
+            );
+        }
+
+        // display: flex outranks the hidden attribute, which is the specific
+        // bug that would leave the empty state drawn over every document.
+        assert!(
+            css.contains("#empty[hidden]"),
+            "#empty is a flex box, so the hidden attribute does not hide it"
+        );
+
+        // The two buttons are the whole point of the state: without them it is a
+        // window that says no and offers nothing.
+        for id in ["empty-open", "empty-reopen"] {
+            assert!(
+                js.contains(&format!("\"{id}\"")),
+                "{id} is a button app.js never wires up"
+            );
+        }
+    }
+
+    /// Esc used to be a second way out, and the whole point of the change is
+    /// that it is not one any more. Which key quits is decided in the page, and
+    /// this is the only place that says so out loud.
+    #[test]
+    fn only_one_key_quits() {
+        let js = include_str!("assets/app.js");
+        assert_eq!(
+            js.matches("type: \"quit\"").count(),
+            1,
+            "something besides Ctrl Q still quits"
+        );
+    }
+
     #[test]
     fn the_bar_is_not_printed() {
         let css = include_str!("assets/style.css");
         let print = &css[css.find("@media print").expect("no print block")..];
 
-        assert!(print.contains("#bar,"), "the bar prints along with the page");
+        assert!(
+            print.contains("#bar,"),
+            "the bar prints along with the page"
+        );
+        assert!(
+            print.contains("#empty,"),
+            "a closed document prints its empty state"
+        );
         assert!(
             print.contains("#theme-menu,"),
             "the theme menu prints along with the page"
@@ -762,7 +1202,10 @@ mod tests {
             ("windows/mark.iss", windows_extensions()),
             ("linux/mark.xml", linux_extensions()),
         ] {
-            assert!(!registered.is_empty(), "{platform} registers nothing at all");
+            assert!(
+                !registered.is_empty(),
+                "{platform} registers nothing at all"
+            );
 
             for ext in registered {
                 assert!(
@@ -841,7 +1284,10 @@ mod tests {
         let page = include_str!("../docs/index.html");
 
         for (_, what) in SHORTCUTS {
-            assert!(page.contains(what), "'{what}' is missing from docs/index.html");
+            assert!(
+                page.contains(what),
+                "'{what}' is missing from docs/index.html"
+            );
         }
     }
 

@@ -21,6 +21,10 @@
   var barToc = document.getElementById("bar-toc");
   var barFind = document.getElementById("bar-find");
   var barWide = document.getElementById("bar-wide");
+  var barReload = document.getElementById("bar-reload");
+  var barPrint = document.getElementById("bar-print");
+  var empty = document.getElementById("empty");
+  var emptyReopen = document.getElementById("empty-reopen");
 
   var BASE_FONT_SIZE = 16.5;
   var ZOOM_STEPS = [0.75, 0.85, 0.92, 1, 1.1, 1.25, 1.4, 1.6, 1.85];
@@ -209,6 +213,15 @@
           page.scrollTop = offset;
         });
       });
+    },
+
+    // Drawn from Rust rather than from the page: wry takes the webview's own
+    // drag events over wherever the drop handler is installed, so the page is
+    // never told a file is above it unless Rust says so.
+    setDragging: function (over) {
+      var root = document.documentElement;
+      if (over) root.setAttribute("data-dragging", "");
+      else root.removeAttribute("data-dragging");
     },
   };
 
@@ -688,6 +701,10 @@
   // -------------------------------------------------------------- find bar
 
   function openFind() {
+    // The bar's own button is disabled with no document open, and the key that
+    // does the same thing should not be the way round it: there is nothing on
+    // an empty page to find.
+    if (!empty.hidden) return;
     find.hidden = false;
     syncBar();
     findInput.select();
@@ -772,6 +789,33 @@
     barName.title = state.path;
     barBack.disabled = !state.back;
     barForward.disabled = !state.forward;
+    showEmpty(state.empty, state.reopen);
+  }
+
+  // The window with no document in it. Everything left in the bar acts on a
+  // document, so with none there is nothing for any of it to act on; the two
+  // arrows are already answered by state.back and state.forward.
+  //
+  // The sidebar needs no handling here: buildToc runs on the empty body a moment
+  // later, finds no heading and puts itself away, and the reader's own answer
+  // about it survives to be honoured again when the document comes back.
+  function showEmpty(on, reopen) {
+    empty.hidden = !on;
+    content.hidden = on;
+    barReload.disabled = on;
+    barToc.disabled = on;
+    barFind.disabled = on;
+    barWide.disabled = on;
+    barPrint.disabled = on;
+
+    // Whatever was being searched for is in a document that is no longer here.
+    if (on && !find.hidden) closeFind();
+
+    emptyReopen.hidden = !reopen;
+    if (reopen) {
+      emptyReopen.textContent = "Reopen " + reopen.name;
+      emptyReopen.title = reopen.path;
+    }
   }
 
   // The three things in the bar that turn something on and leave it on.
@@ -795,6 +839,15 @@
     });
   }
 
+  press("bar-open", function () {
+    send({ type: "pick" });
+  });
+  press("empty-open", function () {
+    send({ type: "pick" });
+  });
+  press("empty-reopen", function () {
+    send({ type: "reopen" });
+  });
   press("bar-back", function () {
     send({ type: "back" });
   });
@@ -836,7 +889,11 @@
       if (!help.hidden) closeHelp();
       else if (!themeMenu.hidden) closeThemeMenu();
       else if (!find.hidden) closeFind();
-      else send({ type: "quit" });
+      // The last rung is the document itself, not the window. Esc arrives here
+      // by being pressed once too often as much as on purpose, and the empty
+      // state offers the document straight back; quitting would not. Once there
+      // is nothing left to close, the key does nothing at all.
+      else if (empty.hidden) send({ type: "close" });
       return;
     }
 
@@ -877,6 +934,9 @@
         case "f":
           event.preventDefault();
           return openFind();
+        case "o":
+          event.preventDefault();
+          return send({ type: "pick" });
         case "p":
           event.preventDefault();
           return send({ type: "print" });

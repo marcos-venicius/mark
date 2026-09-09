@@ -357,7 +357,10 @@ mod tests {
     fn mermaid_fences_keep_their_language_and_their_source() {
         let html = renderer().render("```mermaid\nflowchart LR\n  A --> B\n```\n");
         assert!(html.contains("class=\"language-mermaid\""), "{html}");
-        assert!(html.contains("flowchart LR") && html.contains("A --&gt; B"), "{html}");
+        assert!(
+            html.contains("flowchart LR") && html.contains("A --&gt; B"),
+            "{html}"
+        );
     }
 
     /// What app.js looks for. comrak renders every kind of maths as the same
@@ -485,7 +488,10 @@ mod tests {
                 let target = protocol::path_from_url(&url).expect("a rewritten url");
                 // images.md points at one file that is not there on purpose, to
                 // show what a broken image looks like.
-                if target.file_name().is_some_and(|name| name == "does-not-exist.png") {
+                if target
+                    .file_name()
+                    .is_some_and(|name| name == "does-not-exist.png")
+                {
                     continue;
                 }
                 assert!(
@@ -507,7 +513,9 @@ mod tests {
         let mut rest = html;
 
         while let Some(at) = rest.find("=\"").map(|at| at + 2) {
-            let Some(end) = rest[at..].find('"') else { break };
+            let Some(end) = rest[at..].find('"') else {
+                break;
+            };
             let value = &rest[at..at + end];
             if protocol::path_from_url(value).is_some() {
                 urls.push(value.to_owned());

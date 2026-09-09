@@ -83,11 +83,19 @@ installation and nothing but Windows itself.
 
 ```
 mark <file>       Open a Markdown file in a window
+mark              Open an empty window and choose a file there
 mark --help       Show usage
 mark --version    Show the version
 
 -f, --foreground  Keep hold of the terminal instead of detaching from it
 ```
+
+With no file, the window opens on the empty state: a message, a button that
+opens the desktop's own file chooser, and whatever was last closed offered back.
+A Markdown file dropped anywhere on the window opens too, whether there is a
+document in it already or not. <kbd>Esc</kbd> closes the document and comes back
+here rather than quitting, so a stray press costs one click; <kbd>Ctrl</kbd>
+<kbd>Q</kbd> is what closes the window.
 
 On Unix `mark` hands the terminal straight back — the prompt returns in about
 30 ms and the window keeps running on its own, so closing the terminal does not
@@ -166,10 +174,12 @@ practical way to see it — a document opened from Explorer never passes a promp
 | <kbd>Shift</kbd> <kbd>D</kbd> | Go back to following the system |
 | <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd> | Back, forward |
 | <kbd>Home</kbd> / <kbd>End</kbd> | Top, bottom |
+| <kbd>Ctrl</kbd> <kbd>O</kbd> | Open a file |
 | <kbd>Ctrl</kbd> <kbd>P</kbd> | Print, or save as PDF |
 | <kbd>Ctrl</kbd> <kbd>R</kbd> | Reload from disk |
 | <kbd>?</kbd> or <kbd>F1</kbd> | Show the help panel |
-| <kbd>Ctrl</kbd> <kbd>Q</kbd> or <kbd>Esc</kbd> | Quit |
+| <kbd>Esc</kbd> | Dismiss, or close the document |
+| <kbd>Ctrl</kbd> <kbd>Q</kbd> | Quit |
 
 ## How it works
 
@@ -275,6 +285,7 @@ would. If that matters for a given file, it is worth knowing before opening it.
 | [`flate2`](https://crates.io/crates/flate2) | Inflating the diagram and formula renderers, which are stored compressed |
 | [`serde_json`](https://crates.io/crates/serde_json) | Messages between the page and Rust |
 | [`open`](https://crates.io/crates/open) | Handing links to the desktop |
+| [`gtk`](https://crates.io/crates/gtk) | The file chooser, on Linux -- already compiled by `tao` |
 | [`anyhow`](https://crates.io/crates/anyhow) | Error reporting |
 
 And one build dependency, on Windows only, linked into nothing:
