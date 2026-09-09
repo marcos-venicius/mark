@@ -1,6 +1,6 @@
 # mark
 
-<img width="1356" height="894" alt="image" src="https://github.com/user-attachments/assets/e713691a-8363-4ff6-bbb6-66c837bd3330" />
+<img width="1366" height="1052" alt="image" src="https://github.com/user-attachments/assets/a07debfc-3ae1-41e1-9038-e42cb7974a58" />
 
 A Markdown viewer with exactly one job. `mark <file>` opens a window, renders
 that file, and stays out of the way.
