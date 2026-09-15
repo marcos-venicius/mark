@@ -207,6 +207,20 @@ pub fn path_from_url(url: &str) -> Option<PathBuf> {
     Some(PathBuf::from(decoded.as_ref()))
 }
 
+/// The fragment a link carries past the file it names -- `section` in
+/// `other.md#section` -- or `None` when there is none to jump to.
+///
+/// Read off the text rather than the parsed `Uri`, because `Uri` has nowhere to
+/// keep a fragment and drops it; that is why `path_from_url` never sees one.
+/// The first `#` is the right one to split on: `file_url` encodes any `#` that
+/// is part of the path, so only the fragment's is left bare. It stays encoded,
+/// the way the page's own links hand it over, and the page decodes it.
+pub fn fragment_of(url: &str) -> Option<&str> {
+    url.split_once('#')
+        .map(|(_, fragment)| fragment)
+        .filter(|fragment| !fragment.is_empty())
+}
+
 /// Answer one request. `doc_dir` is the directory of the document on screen, and
 /// changes as the reader follows links between files.
 pub fn serve(
@@ -417,6 +431,20 @@ mod tests {
             let path = Path::new(path);
             assert_eq!(path_from_url(&file_url(path)).as_deref(), Some(path));
         }
+    }
+
+    /// The path decides which file opens and the fragment where in it, and a
+    /// `#` that belongs to the path must not be taken for the start of one.
+    #[test]
+    fn a_fragment_travels_beside_the_path_not_inside_it() {
+        let path = Path::new("/tmp/c#d/other.md");
+        let link = format!("{}#usage", file_url(path));
+
+        assert_eq!(path_from_url(&link).as_deref(), Some(path));
+        assert_eq!(fragment_of(&link), Some("usage"));
+
+        assert_eq!(fragment_of(&file_url(path)), None);
+        assert_eq!(fragment_of(&format!("{}#", file_url(path))), None);
     }
 
     #[test]

@@ -9,6 +9,36 @@ on every push and the tag moves with it. So nothing here waits to be released --
 whatever is on `main` is what the download gives you -- and entries are headed
 with the date the work landed rather than with a number.
 
+## 2026-09-15
+
+Two of the smaller ideas in `FUTURE.md`: a link that names a heading in another
+file lands on it, and the window comes back the way it was left.
+
+### Added
+
+- **Links land on the heading they name.** `other.md#section` opens the file at
+  that section rather than at its top, once any diagrams and formulas above it
+  have been drawn. A fragment that names no heading opens at the top, as before;
+  back and forward still land at the top of the file.
+- **The window remembers how it was left**: its size, whether it was maximised,
+  the sidebar (<kbd>T</kbd>) and the wide measure (<kbd>Z</kbd>), beside the
+  theme it already kept. All of it is in the webview's own storage; `mark` still
+  writes no file of its own.
+
+### Changed
+
+- **The window appears once the page has loaded** rather than as soon as it
+  exists, so that it opens at the remembered size instead of jumping to it. It
+  no longer flashes white before a dark theme, either.
+- **<kbd>Z</kbd> is remembered.** It used to reset with every window, on the
+  grounds that the measure was a fact about one document; it turns out to be how
+  a reader likes to read.
+- Jumping to a heading inside the page finds headings with accents in them, and
+  no longer mistakes a heading for part of the window that shares its id --
+  a section called "Page" or "Help".
+- <kbd>T</kbd> does nothing on a document with no headings, where there is no
+  sidebar to show.
+
 ## 2026-09-09
 
 Esc stops being a way out of the program and becomes one thing only: dismiss.

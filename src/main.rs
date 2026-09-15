@@ -15,6 +15,7 @@ use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use tao::dpi::LogicalSize;
@@ -72,14 +73,33 @@ const SHORTCUTS: &[(&str, &str)] = &[
 /// and with no name there is nothing for the dash to join.
 const NO_DOCUMENT_TITLE: &str = "mark";
 
+/// What a window opens at when nothing is remembered, in logical pixels.
+const DEFAULT_SIZE: (f64, f64) = (1100.0, 820.0);
+
+/// Smaller than this and the bar no longer fits across the top. A remembered
+/// size below it is not something the reader chose so much as something that
+/// went wrong.
+const MIN_SIZE: (f64, f64) = (480.0, 360.0);
+
+/// How long the window waits hidden for the page before it is shown anyway.
+/// Generous on purpose: the net is for a page that will never answer, and a
+/// page that answers after it finds the window already on screen, where its
+/// remembered size is let go rather than jumped to. A cold start of the
+/// webview on a slow machine should still come in first.
+const REVEAL_ANYWAY: Duration = Duration::from_secs(5);
+
 /// File types `mark` opens itself. Anything else is handed to the desktop.
 const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mkdn", "mdx", "txt"];
 
 /// Things that happen off the event loop and need the webview to react.
 #[derive(Debug)]
 enum UserEvent {
-    /// The page finished loading and is ready to be filled in.
-    Ready,
+    /// The page finished loading and is ready to be filled in. It brings back
+    /// the size the window was left at last time, when it kept one.
+    Ready(Option<Geometry>),
+    /// Show the window whether the page has answered or not -- the net under
+    /// `Ready`, sent once `REVEAL_ANYWAY` has passed.
+    Reveal,
     /// The open file changed on disk.
     Changed,
     /// A link was activated.
@@ -137,7 +157,9 @@ fn run() -> Result<()> {
             path.as_deref()
                 .map_or_else(|| NO_DOCUMENT_TITLE.to_string(), title_for),
         )
-        .with_inner_size(LogicalSize::new(1100.0, 820.0))
+        .with_inner_size(LogicalSize::new(DEFAULT_SIZE.0, DEFAULT_SIZE.1))
+        // Hidden until the page says what size it remembers. See `App::reveal`.
+        .with_visible(false)
         .build(&event_loop)
         .context("could not open a window")?;
 
@@ -152,8 +174,19 @@ fn run() -> Result<()> {
         webview,
         window,
         watcher: None,
+        answered: false,
     };
     app.rewatch(&proxy);
+
+    // The net under the page's `ready`. A page that never answers -- a script
+    // that fails to load, a policy that refuses it -- would otherwise leave a
+    // process running with no window, and so with no Ctrl Q to end it. The
+    // thread starts after `detach`, which is the order the fork needs.
+    let late = proxy.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(REVEAL_ANYWAY);
+        let _ = late.send_event(UserEvent::Reveal);
+    });
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -164,9 +197,15 @@ fn run() -> Result<()> {
                 ..
             } => *control_flow = ControlFlow::Exit,
 
+            Event::WindowEvent {
+                event: WindowEvent::Resized(_),
+                ..
+            } => app.remember_window(),
+
             Event::UserEvent(UserEvent::Quit) => *control_flow = ControlFlow::Exit,
 
-            Event::UserEvent(UserEvent::Ready) => app.show(Placement::Top),
+            Event::UserEvent(UserEvent::Ready(geometry)) => app.ready(geometry),
+            Event::UserEvent(UserEvent::Reveal) => app.reveal(None),
             Event::UserEvent(UserEvent::Changed) => app.show(Placement::Keep),
             Event::UserEvent(UserEvent::Reload) => app.show(Placement::Keep),
             Event::UserEvent(UserEvent::Print) => app.print(),
@@ -179,7 +218,9 @@ fn run() -> Result<()> {
             Event::UserEvent(UserEvent::Reopen) => app.reopen(&proxy),
             Event::UserEvent(UserEvent::Pick) => app.pick(&proxy),
             Event::UserEvent(UserEvent::Dragging(over)) => app.dragging(over),
-            Event::UserEvent(UserEvent::Dropped(path)) => app.open_path(path, &proxy),
+            Event::UserEvent(UserEvent::Dropped(path)) => {
+                app.open_path(path, Placement::Top, &proxy)
+            }
 
             _ => {}
         }
@@ -379,11 +420,59 @@ fn attach_console() {
 fn attach_console() {}
 
 /// Where the reader should end up after the page is replaced.
-#[derive(Clone, Copy)]
 enum Placement {
     /// Stay put -- used for reloads, so saving does not lose your place.
     Keep,
     Top,
+    /// At the heading a link named along with the file: `section` in
+    /// `other.md#section`. Still percent-encoded, as the link had it; the page
+    /// decodes it. One that names no heading lands at the top.
+    Fragment(String),
+}
+
+/// The window's size as the page keeps it between runs, in logical pixels, so
+/// that a window last used on a screen with another scale comes back the same
+/// size to the eye.
+///
+/// It lives in the page's `localStorage` beside the theme rather than in a file
+/// of mark's own: the webview keeps that store already, and mark writes nothing
+/// itself. What that costs is that Rust hears of it only once the page has
+/// loaded, which is why the window starts hidden -- see `App::reveal`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Geometry {
+    width: f64,
+    height: f64,
+    maximized: bool,
+}
+
+impl Geometry {
+    /// Whatever the page sent, or `None` when it is not a size at all. Storage
+    /// is the reader's to edit and an older version's to have written, so
+    /// nothing in it is taken to be well-formed.
+    fn from_json(value: &serde_json::Value) -> Option<Self> {
+        Some(Self {
+            width: value.get("width")?.as_f64()?,
+            height: value.get("height")?.as_f64()?,
+            maximized: value
+                .get("maximized")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        })
+    }
+
+    /// Kept to something that fits on the screen the window is about to open
+    /// on. The one it was left on may have been a larger monitor that has since
+    /// been unplugged, and a window bigger than its screen has the bar and its
+    /// own edges out of reach. The floor wins over the screen, should a screen
+    /// ever be smaller than the floor: a window too big is still a window.
+    fn clamped(self, screen: Option<(f64, f64)>) -> Self {
+        let (widest, tallest) = screen.unwrap_or((f64::MAX, f64::MAX));
+        Self {
+            width: self.width.min(widest).max(MIN_SIZE.0),
+            height: self.height.min(tallest).max(MIN_SIZE.1),
+            ..self
+        }
+    }
 }
 
 struct App {
@@ -402,6 +491,10 @@ struct App {
     webview: WebView,
     window: Window,
     watcher: Option<FileWatcher>,
+    /// True once the page has sent `ready`. Before that there is no page to
+    /// tell anything to -- and nothing it was keeping has been read back yet,
+    /// which a resize reported too early would overwrite.
+    answered: bool,
 }
 
 impl App {
@@ -461,11 +554,16 @@ impl App {
         };
 
         let keep_scroll = matches!(placement, Placement::Keep);
+        let fragment = match placement {
+            Placement::Fragment(fragment) => serde_json::Value::from(fragment),
+            Placement::Keep | Placement::Top => serde_json::Value::Null,
+        };
         let script = format!(
-            "window.__mark.setContent({}, {}, {})",
+            "window.__mark.setContent({}, {}, {}, {})",
             serde_json::Value::from(body),
             serde_json::Value::from(keep_scroll),
             state,
+            fragment,
         );
         let _ = self.webview.evaluate_script(&script);
     }
@@ -501,12 +599,28 @@ impl App {
             let _ = open::that_detached(&path);
             return;
         }
-        self.open_path(path, proxy);
+
+        // A link can name a heading as well as a file. Nothing else that opens
+        // a document -- a drop, the chooser, reopening -- has one to name.
+        let placement = match protocol::fragment_of(href) {
+            Some(fragment) => Placement::Fragment(fragment.to_owned()),
+            None => Placement::Top,
+        };
+        self.open_path(path, placement, proxy);
     }
 
     /// Put a document on screen, wherever it came from: a link, the file dialog,
     /// or something dropped on the window.
-    fn open_path(&mut self, path: PathBuf, proxy: &EventLoopProxy<UserEvent>) {
+    ///
+    /// A link back into the document already open, with a heading on the end,
+    /// comes through here too and is read again rather than only scrolled:
+    /// one way in for every link, and the file may have changed since anyway.
+    fn open_path(
+        &mut self,
+        path: PathBuf,
+        placement: Placement,
+        proxy: &EventLoopProxy<UserEvent>,
+    ) {
         // The file may have gone since it was last seen -- closed a minute ago
         // and deleted, or dropped from a window that has moved on.
         if !path.is_file() {
@@ -530,7 +644,7 @@ impl App {
             }
         }
         self.closed = false;
-        self.navigated(proxy);
+        self.navigated(placement, proxy);
     }
 
     /// Put the document away and show the empty state.
@@ -544,7 +658,7 @@ impl App {
             return;
         }
         self.closed = true;
-        self.navigated(proxy);
+        self.navigated(Placement::Top, proxy);
     }
 
     /// The way back from an Esc nobody meant to press.
@@ -559,13 +673,13 @@ impl App {
         let Some(path) = self.history.get(self.cursor).cloned() else {
             return;
         };
-        self.open_path(path, proxy);
+        self.open_path(path, Placement::Top, proxy);
     }
 
     /// Ask the desktop for a file and open whatever comes back.
     fn pick(&mut self, proxy: &EventLoopProxy<UserEvent>) {
         if let Some(path) = pick_file(&self.window) {
-            self.open_path(path, proxy);
+            self.open_path(path, Placement::Top, proxy);
         }
     }
 
@@ -574,6 +688,74 @@ impl App {
         let script = format!(
             "window.__mark.setDragging({})",
             serde_json::Value::from(over)
+        );
+        let _ = self.webview.evaluate_script(&script);
+    }
+
+    /// The page has loaded: show the window, at the size the page kept for it,
+    /// and put the document in it.
+    fn ready(&mut self, geometry: Option<Geometry>) {
+        self.answered = true;
+        self.reveal(geometry);
+        self.show(Placement::Top);
+    }
+
+    /// Show the window, at the size the page remembered when there is one.
+    ///
+    /// The window is built hidden so that this happens before it is ever on
+    /// screen. Resizing one already shown is a jump the reader watches, and on
+    /// Wayland the compositor has placed it by then, going by the size it had.
+    /// Hidden until now, it also never shows the white of an empty webview
+    /// before a dark theme arrives.
+    ///
+    /// Only the first call does anything. A page that answers after the net in
+    /// `run` has shown the window finds it where the reader can already see it,
+    /// and moving it then would be the jump this exists to avoid.
+    fn reveal(&self, geometry: Option<Geometry>) {
+        if self.window.is_visible() {
+            return;
+        }
+        if let Some(geometry) = geometry {
+            // A hidden window is on no monitor yet; tao answers with the
+            // primary one, which is where a new window opens anyway.
+            let screen = self.window.current_monitor().map(|monitor| {
+                let size = monitor.size().to_logical::<f64>(monitor.scale_factor());
+                (size.width, size.height)
+            });
+            let geometry = geometry.clamped(screen);
+            // The size before the maximising, so that GTK has it to restore to.
+            self.window
+                .set_inner_size(LogicalSize::new(geometry.width, geometry.height));
+            self.window.set_maximized(geometry.maximized);
+        }
+        self.window.set_visible(true);
+    }
+
+    /// Hand the window's size to the page to keep for next time.
+    ///
+    /// On every resize rather than once on the way out: a script sent while the
+    /// process is exiting may never run. The page waits for the resizing to
+    /// settle before it writes. It is Rust that measures, not the page's own
+    /// `innerWidth`, so that the size is taken in exactly the terms `reveal`
+    /// gives it back in -- which is less obvious than it sounds; see
+    /// `restorable_size`.
+    fn remember_window(&self) {
+        // Hidden, the window is still whatever it was built at; minimised, it
+        // may report no size at all. Neither is a size anybody chose.
+        if !self.answered || !self.window.is_visible() || self.window.is_minimized() {
+            return;
+        }
+        let size = restorable_size(&self.window);
+        if size.width < 1.0 || size.height < 1.0 {
+            return;
+        }
+        let script = format!(
+            "window.__mark.rememberWindow({})",
+            serde_json::json!({
+                "width": size.width.round(),
+                "height": size.height.round(),
+                "maximized": self.window.is_maximized(),
+            })
         );
         let _ = self.webview.evaluate_script(&script);
     }
@@ -590,13 +772,15 @@ impl App {
             return;
         }
         self.cursor = target;
-        self.navigated(proxy);
+        // Back and forward remember a file and nothing more, so they land at
+        // its top, whatever heading the link that first led there named.
+        self.navigated(Placement::Top, proxy);
     }
 
     /// The four things that change together when what is on screen changes --
     /// including changing to nothing, which is why closing comes through here
     /// too rather than repeating three of the four somewhere else.
-    fn navigated(&mut self, proxy: &EventLoopProxy<UserEvent>) {
+    fn navigated(&mut self, placement: Placement, proxy: &EventLoopProxy<UserEvent>) {
         match self.current().map(Path::to_path_buf) {
             Some(path) => {
                 *self.doc_dir.lock().expect("doc dir lock") = parent_of(&path);
@@ -608,7 +792,7 @@ impl App {
             None => self.window.set_title(NO_DOCUMENT_TITLE),
         }
         self.rewatch(proxy);
-        self.show(Placement::Top);
+        self.show(placement);
     }
 
     /// Point the live-reload watcher at whichever file is now open.
@@ -713,6 +897,42 @@ fn attach(builder: WebViewBuilder<'_>, window: &Window) -> wry::Result<WebView> 
 )))]
 fn attach(builder: WebViewBuilder<'_>, window: &Window) -> wry::Result<WebView> {
     builder.build(window)
+}
+
+/// The window's size in the terms `set_inner_size` takes it back in.
+///
+/// On GTK that is not tao's own `inner_size`. tao reads that one off the
+/// configure event, which measures the whole surface -- the shadows GTK draws
+/// around a window with client-side decorations included -- while
+/// `set_inner_size` asks GTK to resize the content alone. Remembering the one
+/// and restoring with the other grew the window by the width of its shadows on
+/// every run. GTK's own getter is the exact inverse of the resize tao sends.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+fn restorable_size(window: &Window) -> LogicalSize<f64> {
+    use gtk::prelude::GtkWindowExt;
+    use tao::platform::unix::WindowExtUnix;
+
+    let (width, height) = window.gtk_window().size();
+    LogicalSize::new(f64::from(width), f64::from(height))
+}
+
+/// Everywhere else tao reads and writes the same client area, and its own
+/// answer is the right one.
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+)))]
+fn restorable_size(window: &Window) -> LogicalSize<f64> {
+    window.inner_size().to_logical(window.scale_factor())
 }
 
 /// Ask the desktop for a Markdown file.
@@ -863,7 +1083,14 @@ fn pick_file(_window: &Window) -> Option<PathBuf> {
 fn decode_message(body: &str) -> Option<UserEvent> {
     let message: serde_json::Value = serde_json::from_str(body).ok()?;
     match message.get("type")?.as_str()? {
-        "ready" => Some(UserEvent::Ready),
+        // What the page kept of the window rides along with its first message
+        // rather than in one of its own, so the window is never shown before
+        // the answer is in. Absent or unreadable is the same as nothing kept,
+        // and never a reason to drop the message: a `ready` lost here is a
+        // window that waits for the net in `run` before it appears.
+        "ready" => Some(UserEvent::Ready(
+            message.get("window").and_then(Geometry::from_json),
+        )),
         "reload" => Some(UserEvent::Reload),
         "print" => Some(UserEvent::Print),
         "close" => Some(UserEvent::Close),
@@ -1144,6 +1371,89 @@ mod tests {
             1,
             "something besides Ctrl Q still quits"
         );
+    }
+
+    /// The page brings back the size it kept in `ready`, and every way that can
+    /// go wrong -- nothing kept, something kept by hand, an older version's
+    /// idea of the shape -- must still open the window.
+    #[test]
+    fn ready_carries_the_remembered_window_or_nothing() {
+        let geometry = |body: &str| match decode_message(body) {
+            Some(UserEvent::Ready(geometry)) => geometry,
+            other => panic!("{body} decoded as {other:?}"),
+        };
+
+        assert_eq!(geometry(r#"{"type":"ready"}"#), None);
+        assert_eq!(geometry(r#"{"type":"ready","window":null}"#), None);
+        assert_eq!(geometry(r#"{"type":"ready","window":{"width":"wide"}}"#), None);
+        assert_eq!(
+            geometry(r#"{"type":"ready","window":{"width":900,"height":700,"maximized":true}}"#),
+            Some(Geometry {
+                width: 900.0,
+                height: 700.0,
+                maximized: true
+            })
+        );
+        assert_eq!(
+            geometry(r#"{"type":"ready","window":{"width":900,"height":700}}"#)
+                .map(|geometry| geometry.maximized),
+            Some(false),
+            "a size with no word on maximising is a window that was not"
+        );
+    }
+
+    /// A size kept on a larger monitor that has since been unplugged would open
+    /// a window with its edges out of reach; one that has shrunk to nothing
+    /// would open a window nobody can find.
+    #[test]
+    fn a_remembered_size_is_kept_on_screen() {
+        let remembered = Geometry {
+            width: 2400.0,
+            height: 1500.0,
+            maximized: false,
+        };
+
+        let laptop = remembered.clamped(Some((1366.0, 768.0)));
+        assert_eq!((laptop.width, laptop.height), (1366.0, 768.0));
+        assert_eq!(remembered.clamped(None), remembered);
+
+        let tiny = Geometry {
+            width: 10.0,
+            height: 0.0,
+            maximized: true,
+        }
+        .clamped(Some((1920.0, 1080.0)));
+        assert_eq!((tiny.width, tiny.height), MIN_SIZE);
+        assert!(tiny.maximized, "clamping changed more than the size");
+    }
+
+    /// Every setting the page keeps is written in one place and read back in
+    /// another. One that is only ever written is a setting that resets itself
+    /// on every run, which is the bug keeping it was meant to fix, and nothing
+    /// on screen says so until the second run.
+    #[test]
+    fn every_remembered_setting_is_read_back() {
+        let js = include_str!("assets/app.js");
+
+        let keys: Vec<&str> = js
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("var "))
+            .filter(|rest| rest.contains("_KEY = \"mark."))
+            .filter_map(|rest| rest.split(' ').next())
+            .collect();
+
+        assert!(keys.len() >= 4, "the page keeps almost nothing: {keys:?}");
+
+        for key in keys {
+            assert!(
+                js.contains(&format!("stored({key})")),
+                "{key} is written and never read back"
+            );
+            assert!(
+                js.contains(&format!("store({key},")),
+                "{key} is read and never written"
+            );
+        }
     }
 
     #[test]

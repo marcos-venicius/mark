@@ -33,7 +33,8 @@
   // The reader's answer about the sidebar, and null until they give one. With
   // no answer the sidebar follows the document: one or two headings is not
   // something you need a map for, so it stays away. Pressing the key is an
-  // answer, and it outranks that either way.
+  // answer, and it outranks that either way -- in this window and in every one
+  // after it, since the answer is kept. applyStoredLayout reads it back.
   var tocChoice = null;
   var spy = null;
 
@@ -61,7 +62,19 @@
   // away.
   var generation = 0;
 
+  // What the page keeps between runs, all of it in localStorage: the webview
+  // keeps that store on disk by itself, and mark writes no file of its own.
+  // Every key is read back somewhere as well as written, and
+  // every_remembered_setting_is_read_back holds the two ends together.
   var THEME_KEY = "mark.theme";
+  var TOC_KEY = "mark.toc";
+  var WIDE_KEY = "mark.wide";
+  var WINDOW_KEY = "mark.window";
+
+  // The size Rust last asked the page to keep, waiting for the resizing to
+  // settle. See rememberWindow.
+  var windowPending = null;
+  var windowTimer = null;
 
   // Every palette a reader can pick, in the order D walks them. "system" is the
   // absence of the attribute rather than a value of it, which is what lets the
@@ -75,18 +88,30 @@
     window.ipc.postMessage(JSON.stringify(message));
   }
 
-  // ------------------------------------------------------------------ theme
-
-  // With nothing stored the stylesheet follows the system on its own, through a
-  // media query, and keeps following it if the system changes while the window
-  // is open. Storing a choice stamps the root element, which outranks that.
-  function storedTheme() {
+  // Storage can be missing or refuse -- a profile that is read-only, a quota
+  // that is full -- and nothing kept in it is worth failing over. A read that
+  // fails is nothing remembered; a write that fails is a choice that lasts
+  // until the window closes.
+  function stored(key) {
     try {
-      return localStorage.getItem(THEME_KEY);
+      return localStorage.getItem(key);
     } catch (e) {
       return null;
     }
   }
+
+  // null takes the key away rather than storing the word, so that "nothing
+  // chosen" reads back as nothing.
+  function store(key, value) {
+    try {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    } catch (e) {
+      // Not being able to remember a choice is no reason to refuse it.
+    }
+  }
+
+  // ------------------------------------------------------------------ theme
 
   // What the reader chose, which is not the same as what is on screen: with
   // "system" the answer is still "system", and the desktop decides the rest.
@@ -98,14 +123,7 @@
   function setTheme(name) {
     if (name === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = name;
-
-    try {
-      if (name === "system") localStorage.removeItem(THEME_KEY);
-      else localStorage.setItem(THEME_KEY, name);
-    } catch (e) {
-      // Not being able to remember the choice is no reason to refuse it.
-    }
-
+    store(THEME_KEY, name === "system" ? null : name);
     markTheme();
   }
 
@@ -126,14 +144,18 @@
     setTheme(THEMES[(at + 1) % THEMES.length]);
   }
 
+  // With nothing stored the stylesheet follows the system on its own, through a
+  // media query, and keeps following it if the system changes while the window
+  // is open. A stored choice stamps the root element, which outranks that.
+  //
   // The list is the validation. Anything else in storage -- a name from a
   // version that offered a palette this one does not, or a key someone else
   // wrote -- leaves the system in charge rather than stamping the root with a
   // value no stylesheet answers to. Index 0 is "system", which is stored as
   // nothing at all, so a stored "system" is discarded by the same test.
   function applyStoredTheme() {
-    var stored = storedTheme();
-    if (THEMES.indexOf(stored) > 0) document.documentElement.dataset.theme = stored;
+    var name = stored(THEME_KEY);
+    if (THEMES.indexOf(name) > 0) document.documentElement.dataset.theme = name;
     markTheme();
   }
 
@@ -190,9 +212,10 @@
   // state is what the bar shows and the page cannot work out for itself: which
   // file this is and whether the history has anywhere to go. It travels with the
   // document rather than in a message of its own, so there is no order between
-  // the two to get right.
+  // the two to get right. The fragment is the heading a link named along with
+  // the file -- `section` in other.md#section -- or null.
   window.__mark = {
-    setContent: function (html, keepScroll, state) {
+    setContent: function (html, keepScroll, state, fragment) {
       var offset = keepScroll ? page.scrollTop : 0;
       var mine = (generation += 1);
       applyState(state);
@@ -208,11 +231,30 @@
       Promise.all([drawDiagrams(mine), typesetMath(mine)]).then(function () {
         if (mine !== generation) return;
         // Images and fonts settle a frame later; restoring after that keeps a
-        // save from nudging the reader off the paragraph they were on.
+        // save from nudging the reader off the paragraph they were on. The
+        // fragment waits for the same frame for the same reason: every diagram
+        // and formula above the heading has moved it by then. One that names
+        // no heading leaves the document at the top, where it would have been.
         requestAnimationFrame(function () {
+          if (fragment && jumpTo(fragment, "auto")) return;
           page.scrollTop = offset;
         });
       });
+    },
+
+    // Called from Rust on every resize, with the window measured the way it
+    // will be restored: Rust can measure the window and cannot keep anything,
+    // and the page can keep things and cannot tell a maximised window from a
+    // large one.
+    //
+    // Written once the resizing has settled rather than on every call: a drag
+    // sends dozens, and maximising sends two -- the first with the new size and
+    // the old state, because GTK reports the size before it reports why. Only
+    // the last one is the truth.
+    rememberWindow: function (geometry) {
+      windowPending = geometry;
+      clearTimeout(windowTimer);
+      windowTimer = setTimeout(keepWindow, 300);
     },
 
     // Drawn from Rust rather than from the page: wry takes the webview's own
@@ -649,23 +691,30 @@
   }
 
   function toggleToc() {
+    // A document with no heading has no sidebar to show, and a press here would
+    // be an answer about one nobody can see -- kept, and waiting to surprise
+    // the reader in the next document that has headings.
+    if (tocList.childElementCount === 0) return;
     // What the key answers is whatever is on screen now, which for a short
     // document is the rule above rather than an earlier press.
     tocChoice = toc.hidden;
     toc.hidden = !tocChoice || tocList.childElementCount === 0;
+    store(TOC_KEY, tocChoice ? "shown" : "hidden");
     syncBar();
   }
 
   // ------------------------------------------------------------------ width
 
   // The reading column is a measure rather than a limit, and the stylesheet
-  // lifts it for whatever carries data-wide. Nothing is remembered between
-  // windows: the theme is a fact about the reader, but whether the measure is
-  // the wrong shape is a fact about the document that happens to be open.
+  // lifts it for whatever carries data-wide. The answer is kept between runs,
+  // like the theme: a reader who widens the page is more often saying how they
+  // like to read on this screen than something about one document, and the
+  // rarer case costs one more press of Z.
   function toggleWide() {
     var root = document.documentElement;
     if (root.hasAttribute("data-wide")) root.removeAttribute("data-wide");
     else root.setAttribute("data-wide", "");
+    store(WIDE_KEY, root.hasAttribute("data-wide") ? "1" : null);
     syncBar();
     // Every line has just been rewrapped, so every heading is somewhere else.
     updateSpy();
@@ -688,14 +737,34 @@
     send({ type: "open", href: link.href });
   });
 
-  function jumpTo(id) {
-    var target = document.getElementById(id) || content.querySelector("[name='" + id + "']");
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  // True when there was somewhere to go. The id arrives as the link wrote it,
+  // and link.href percent-encodes whatever the document left bare, so a heading
+  // with an accent in it arrives as %C3%A7 and friends; comrak's ids hold the
+  // characters themselves, so the decoded form is tried as well.
+  function jumpTo(id, behavior) {
+    var target = findAnchor(id);
+    if (!target) {
+      try {
+        target = findAnchor(decodeURIComponent(id));
+      } catch (e) {
+        target = null;
+      }
+    }
+    if (!target) return false;
+    target.scrollIntoView({ behavior: behavior || "smooth", block: "start" });
     // A document that fits the window does not scroll at all, so nothing else
     // would ever tell the sidebar which entry the reader picked. Where the page
     // does scroll, the spy settles the highlight a moment later anyway.
-    markActive(id);
+    markActive(target.id || id);
+    return true;
+  }
+
+  // Inside the document only. The page around it has ids of its own -- page,
+  // toc, help -- and a heading that happened to share one would lose to them.
+  function findAnchor(id) {
+    if (!id) return null;
+    var quoted = CSS.escape(id);
+    return content.querySelector("#" + quoted + ", [name=\"" + quoted + "\"]");
   }
 
   // -------------------------------------------------------------- find bar
@@ -1014,11 +1083,51 @@
     { passive: false }
   );
 
+  // ----------------------------------------------------------------- window
+
+  // The sidebar and the measure, as the reader last left them. Anything in
+  // storage but the values toggleToc and toggleWide write is left alone rather
+  // than guessed at.
+  function applyStoredLayout() {
+    var answer = stored(TOC_KEY);
+    if (answer === "shown") tocChoice = true;
+    else if (answer === "hidden") tocChoice = false;
+
+    if (stored(WIDE_KEY) === "1") document.documentElement.setAttribute("data-wide", "");
+    syncBar();
+  }
+
+  // The window as it was last left, for Rust to open the next one at. Anything
+  // that is not JSON is nothing kept; whether what is kept makes a sensible
+  // size is Rust's question, since Rust knows the screen.
+  function storedWindow() {
+    try {
+      return JSON.parse(stored(WINDOW_KEY));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // A maximised window keeps the size it had before, so that one reopened
+  // maximised and then restored lands on the window the reader shaped rather
+  // than on one the size of the screen.
+  function keepWindow() {
+    var next = windowPending;
+    var kept = storedWindow();
+    if (next.maximized && kept && typeof kept.width === "number" && typeof kept.height === "number") {
+      next = { width: kept.width, height: kept.height, maximized: true };
+    }
+    store(WINDOW_KEY, JSON.stringify(next));
+  }
+
   // Before anything is on screen, so a remembered choice never shows as a flash
-  // of the other palette.
+  // of the other palette or the other measure.
   applyStoredTheme();
+  applyStoredLayout();
 
   // Ask for the document. Doing it this way instead of having Rust push on a
   // timer removes the race between the webview loading and the first render.
-  send({ type: "ready" });
+  // The window's remembered size rides along: Rust keeps the window hidden
+  // until this arrives, so that it opens at that size rather than jumping to it.
+  send({ type: "ready", window: storedWindow() });
 })();

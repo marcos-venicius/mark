@@ -37,8 +37,11 @@ The extensions that open here are `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`,
 - Every heading has an anchor of its own, which is also what the contents
   sidebar is built from.
 
-A fragment on a link to *another* file is not followed yet: the file opens at
-the top. That one is written down in `FUTURE.md`.
+## At a heading in another file
+
+A fragment on a link to another file is followed too:
+[Python, in the code examples](code.md#python) opens that file at its Python
+section rather than at the top. <kbd>Alt</kbd> <kbd>←</kbd> brings you back here.
 
 ## A fence that will not parse
 

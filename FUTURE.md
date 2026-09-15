@@ -33,14 +33,29 @@ one thing that did not turn up in the guess is that Markdown reads a line before
 KaTeX does: a line holding nothing but `=` or `-` underlines the line above it,
 so an equation with one in it belongs in a ```math fence.
 
+Following a link like `other.md#section` to its heading was one of the smaller
+ideas, and has shipped. The fragment was never lost in the page: `http::Uri`,
+which reads the link on the Rust side, has nowhere to keep one and dropped it.
+It is read off the text beside the path now and handed down with the document,
+and the page jumps once the diagrams and formulas above the heading have been
+drawn. Back and forward still remember a file and nothing more, and land at
+its top.
+
+Remembering the window between runs was another, and has shipped as well: its
+size and whether it was maximised, the sidebar and the wide measure, beside the
+theme that was already kept. All of it is in the page's `localStorage`, which
+the webview keeps by itself, so `mark` still writes no file of its own. The size
+is the awkward one, because the window exists before the page does and only the
+page can read the store. So the window is built hidden and shown when the
+page's `ready` brings the size back, with a timer underneath in case it never
+does. It is written on every resize rather than on the way out, since a script
+sent to a page while the process exits may never run. Zoom is not kept.
+
 ## Smaller ideas
 
 - Export the rendered document to HTML. PDF is covered by Ctrl P, which
   hands the page to the print dialog; what is missing is a headless
   `mark --pdf out.pdf` for scripts, which needs the platform print APIs
   directly rather than a dialog.
-- Remember window size and the sidebar state between runs.
-- Jump to the fragment when following a link like `other.md#section`; today the
-  file opens at the top.
 - A presentation mode that splits the document on `---`.
 - Multiple documents in tabs.

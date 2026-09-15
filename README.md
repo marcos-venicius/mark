@@ -142,9 +142,11 @@ practical way to see it — a document opened from Explorer never passes a promp
 - **Live reload.** Save the file in your editor and the window updates without
   losing your place in the document.
 - **A table of contents** in the sidebar, tracking the section you are reading.
-  It appears for documents with at least three headings.
+  It appears for documents with at least three headings; <kbd>T</kbd> shows or
+  hides it, and that answer is remembered between runs.
 - **Links between documents.** Clicking a relative link to another `.md` opens it
-  in the same window, with back and forward history. Links to the web open in
+  in the same window, at the heading it names if it names one
+  (`other.md#section`), with back and forward history. Links to the web open in
   your default browser; other files open in whatever application owns them.
 - **A bar across the top** — back and forward, reload, the table of contents,
   find in page, print, the theme menu, and the help panel, with the name of the
@@ -159,6 +161,10 @@ practical way to see it — a document opened from Explorer never passes a promp
   remembered between runs, and <kbd>Shift</kbd> <kbd>D</kbd> goes back to
   following the system. The interface and the syntax highlighting change
   together.
+- **It comes back the way you left it.** The window's size, whether it was
+  maximised, the sidebar and the wide measure (<kbd>Z</kbd>) are remembered
+  between runs, alongside the theme — in the webview's own storage, not in a
+  file of `mark`'s.
 
 ## Keyboard shortcuts
 
@@ -226,6 +232,14 @@ message its shortcut sends, and no part of it has a route into Rust of its own.
 What it knows that the page does not — which file is open, and whether the
 history has anywhere left to go — travels down with the document itself rather
 than in a message of its own, so the two can never arrive out of order.
+
+The window starts hidden. Its size is kept in the page's storage beside the
+theme, and only the page can read that back — so the window is built, the page
+loads, and its first message brings the size along; only then is the window
+sized and shown. Resizing a window already on screen would be a jump the reader
+watches, and on Wayland the compositor has placed it by then, going by the size
+it had. A page that never answers is covered too: a timer shows the window
+anyway after five seconds.
 
 Windows has no fork, and a console application cannot give its console back. The
 equivalent is being a GUI program from the start, which is what the binary is —

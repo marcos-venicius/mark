@@ -507,6 +507,45 @@ mod tests {
         assert!(checked > 10, "only {checked} paths were checked");
     }
 
+    /// A fragment names a heading by the id comrak gives it, which is the
+    /// heading's text run through rules nobody writing a link has in front of
+    /// them. One that misses opens the file at the top and says nothing, which
+    /// looks exactly like the feature not being there at all.
+    #[test]
+    fn every_fragment_the_examples_link_to_is_a_heading_there() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+        let renderer = Renderer::new(Arc::new(Mutex::new(dir.clone())));
+        let mut checked = 0;
+
+        for entry in std::fs::read_dir(&dir).expect("the examples are there") {
+            let file = entry.expect("a directory entry").path();
+            if file.extension().and_then(|ext| ext.to_str()) != Some("md") {
+                continue;
+            }
+
+            let html = renderer.render(&std::fs::read_to_string(&file).expect("readable"));
+
+            for url in local_urls(&html) {
+                let Some(fragment) = protocol::fragment_of(&url) else {
+                    continue;
+                };
+                let fragment = percent_encoding::percent_decode_str(fragment).decode_utf8_lossy();
+                let target = protocol::path_from_url(&url).expect("a rewritten url");
+                let text = std::fs::read_to_string(&target).expect("the target is readable");
+
+                assert!(
+                    renderer.render(&text).contains(&format!("id=\"{fragment}\"")),
+                    "{} links to #{fragment} in {}, which has no such heading",
+                    file.display(),
+                    target.display()
+                );
+                checked += 1;
+            }
+        }
+
+        assert!(checked > 0, "no example links to a heading in another file");
+    }
+
     /// Every `href` and `src` in some rendered HTML that our own handler serves.
     fn local_urls(html: &str) -> Vec<String> {
         let mut urls = Vec::new();

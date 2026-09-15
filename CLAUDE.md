@@ -47,9 +47,11 @@ never reach it: `linux/mark.desktop`, `linux/mark.xml`, `windows/mark.iss` and
 `assets/mark.ico` are how the desktop learns that `mark` exists.
 
 A document reaches the screen like this: `parse_args` checks the arguments, `detach` hands
-the terminal back, the window and webview come up, and `app.js` sends `{"type":"ready"}`.
-Only then does `App::show` read the file, `Renderer::render` turn it into HTML, and Rust
-inject it with `window.__mark.setContent(html, keepScroll, state)`. The page asks rather
+the terminal back, the window comes up hidden with the webview in it, and `app.js` sends
+`{"type":"ready"}` carrying the window size it kept last time. `App::reveal` sizes the
+window and shows it. Only then does `App::show` read the file, `Renderer::render` turn it
+into HTML, and Rust inject it with `window.__mark.setContent(html, keepScroll, state,
+fragment)` -- `fragment` being the heading a link named, or `null`. The page asks rather
 than Rust pushing on a timer, which removes the race with the webview loading. `state` is
 the top bar's half of that same call -- the file name, its path, and whether the history
 has anywhere to go either way -- carried along with the document so that the two cannot
@@ -102,6 +104,8 @@ Each of these is load-bearing. The comment above it says the same thing at more 
 | Scope every palette; `@media print` comes last | `src/render.rs:121` | one stray token in one language; a printout in pale colours |
 | Fill in only the standard handles Windows left empty | `src/main.rs:308` | `mark --version > out.txt` prints to the console and leaves the file empty |
 | `#split` keeps `min-height: 0` under the bar | `src/assets/style.css:279` | a flex item will not shrink below its content, so the window scrolls instead of the document |
+| Build the window hidden; `App::reveal` shows it once `ready` has brought the kept size | `src/main.rs`, `run` and `App::reveal` | the window opens at the default size and jumps, already placed by the compositor for the wrong one |
+| Remember the window's size through `restorable_size`, not tao's `inner_size` | `src/main.rs`, `restorable_size` | on GTK the two disagree by the client-side shadows, and the window grows by them on every run |
 | Draw every diagram once light and once dark; the stylesheet picks one | `src/assets/app.js:38`, `src/assets/style.css:701` | mermaid bakes its colours into the SVG, so `d` would need a redraw and a dark page would print dark |
 
 Two more are there because `render.unsafe = true` lets documents bring their own HTML: the
@@ -116,7 +120,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 51 tests: 30 in render.rs, 9 in protocol.rs, 12 in main.rs
+cargo test          # 57 tests: 31 in render.rs, 10 in protocol.rs, 16 in main.rs
 cargo clippy
 cargo run -- examples/README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package
@@ -149,9 +153,15 @@ Things written down nowhere else:
 - The Windows half of `main.rs` cannot be built here, but it can be type-checked:
   `rustup target add x86_64-pc-windows-msvc` and then `cargo check` on a scratch crate
   holding the same code. The full crate does not cross-check -- `onig_sys` compiles C.
+- What the window remembers can be checked without touching the window. The page's
+  `localStorage` is a SQLite file, `~/.local/share/mark/localstorage/mark_localhost_0.localstorage`,
+  table `ItemTable`, values in UTF-16LE. Write a key while `mark` is not running, launch
+  it, end it after a few seconds, and read the key back: an unchanged `mark.window` is a
+  round trip with no drift. Back the file up first, because it holds the reader's own theme.
 - Tests live inline in `#[cfg(test)] mod tests`. There is no `tests/` directory, and
-  `watcher.rs` has none. The twelve in `main.rs` all guard something written down twice or
-  unreachable from Linux: the shortcut table (rendered into the terminal and the window,
+  `watcher.rs` has none. The sixteen in `main.rs` mostly guard something written down twice
+  or unreachable from Linux: the settings `app.js` keeps against the ones it reads back,
+  what `ready` may bring back about the window, the shortcut table (rendered into the terminal and the window,
   and the window's copy cannot be checked from a terminal), the file types the two
   installers claim -- against `MARKDOWN_EXTENSIONS` and against each other -- the sizes
   inside the `.ico`, the bar's buttons against the ids `app.js` wires up, the print
@@ -190,6 +200,7 @@ see Ground rules.
 | --- | --- |
 | A new keyboard shortcut | `SHORTCUTS` in `src/main.rs` (the terminal text and the help panel both follow) -> `src/assets/app.js` keydown -> `UserEvent` and `decode_message` in `src/main.rs`, if it needs the filesystem -> the README table -> the list in `docs/index.html`, which `the_landing_page_lists_every_shortcut` insists on -> a button in `#bar` if it is worth pointing at, with the key in its tooltip |
 | A new servable file type | `SERVABLE` in `src/protocol.rs` — a security decision |
+| Something remembered between runs | a `*_KEY` beside `THEME_KEY` in `src/assets/app.js`, read with `stored` and written with `store` -- `every_remembered_setting_is_read_back` fails on one that is only written. Nothing goes in a file of mark's own. The window's size is the one Rust takes part in: measured in `App::remember_window`, applied in `App::reveal` |
 | The file chooser | `pick_file` in `src/main.rs`, twice: GTK on Linux and `GetOpenFileNameW` on Windows. Neither pulls in a crate — `gtk` is already compiled by `tao` and `windows-sys` was already there. The Windows half only type-checks with the scratch-crate trick below |
 | The empty state | `#empty` in `src/assets/shell.html` -> `showEmpty` in `src/assets/app.js` -> the block in `src/assets/style.css` and its `@media print` entry -> `App::show`'s `None` arm, which fills the reopen button's label. `the_empty_state_is_wired_up` holds the three files together |
 | A new comrak extension | `Renderer::new` in `src/render.rs`, styling in `src/assets/style.css`, plus a test |

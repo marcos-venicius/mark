@@ -20,7 +20,7 @@ cargo run -- examples/README.md
 
 | Key | What it does here |
 | --- | --- |
-| <kbd>t</kbd> | Hides the contents sidebar. It appears from three headings up, so this page has none |
+| <kbd>t</kbd> | Shows or hides the contents sidebar, and the answer is kept for next time. On its own it appears from three headings up, so this page starts without one |
 | <kbd>d</kbd> | Light and dark, diagrams included |
 | <kbd>Ctrl</kbd> <kbd>P</kbd> | The printed version is always the light one |
 | <kbd>?</kbd> | Everything else |
