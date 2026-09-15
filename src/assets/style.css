@@ -783,10 +783,29 @@ pre[data-lang]::before {
    block at the foot of this file is the last of them, and comes last so it
    wins. */
 
+/* Relative for the copy button in its corner; the lens because a click opens
+   it in the viewer, which nothing else on the page looks like it would. */
 .diagram {
+  position: relative;
   margin: 1.6em 0;
   text-align: center;
+  cursor: zoom-in;
 }
+
+.diagram:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+/* A diagram has no box of its own for the button to sit in the corner of, the
+   way a code block does, so the button carries its own border. */
+.diagram > .copy {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.diagram:hover > .copy { opacity: 1; }
 
 /* mermaid sizes the SVG for the drawing, not for the column it lands in. */
 .diagram svg {
@@ -816,6 +835,91 @@ pre[data-lang]::before {
   color: var(--caution);
   font-size: 0.85rem;
 }
+
+/* ----------------------------------------------------------------- viewer */
+
+/* A diagram opened over the whole window. Above the bar and the find bar, both
+   at 10; below the help panel at 20, which F1 can still open over it. The page
+   colour behind it rather than a dimmed backdrop: the drawing was made for that
+   colour, and the picture copied from here is filled with it too. */
+#viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  background: var(--bg);
+}
+
+#viewer[hidden] { display: none; }
+
+#viewer-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  outline: 0;
+  cursor: grab;
+  /* A drag is a move, not a selection of the labels it passes over. */
+  user-select: none;
+  touch-action: none;
+}
+
+#viewer-stage.dragging { cursor: grabbing; }
+
+/* Placed by app.js: a width for the zoom and a translate for the pan. The zoom
+   is a width rather than a scale() so that the drawing is laid out again at
+   each size and stays sharp, where a transform would stretch a picture of it. */
+#viewer-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#viewer-canvas .diagram {
+  margin: 0;
+  cursor: inherit;
+}
+
+/* mermaid writes a max-width into the SVG's own style attribute, which only
+   !important outranks; without it the drawing could never grow past its size. */
+#viewer-canvas .diagram svg {
+  width: 100%;
+  max-width: none !important;
+}
+
+/* The viewer's bar has a copy button of its own. */
+#viewer .copy { display: none; }
+
+#viewer-bar {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.8rem;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+#viewer-bar button {
+  min-width: 2rem;
+  height: 1.9rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 0.8rem;
+  /* The zoom is read as a number that changes under the pointer; figures of
+     one width keep the buttons beside it still. */
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+#viewer-bar button:hover { background: var(--surface-strong); color: var(--text); }
+#viewer-bar button.said { color: var(--tip); }
+#viewer-fit { min-width: 3.6rem; }
 
 /* ------------------------------------------------------------------ maths */
 
@@ -1116,6 +1220,7 @@ tbody tr:nth-child(even) { background: var(--surface); }
   #find,
   #help,
   #empty,
+  #viewer,
   a.anchor { display: none !important; }
 
   #split { display: block; }

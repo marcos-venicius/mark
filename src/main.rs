@@ -7,6 +7,8 @@
 // with no console at all, which is what `attach_console` is for.
 #![windows_subsystem = "windows"]
 
+mod base64;
+mod clipboard;
 mod protocol;
 mod render;
 mod watcher;
@@ -121,6 +123,11 @@ enum UserEvent {
     Dragging(bool),
     /// A file was dropped on the window.
     Dropped(PathBuf),
+    /// A diagram the page drew as a PNG, in base64, for Rust to put on the
+    /// clipboard. Only where `clipboard::COPIED_BY` says so.
+    CopyPicture(String),
+    /// Another program took the clipboard over from the picture copied here.
+    PictureReleased,
     Quit,
 }
 
@@ -171,10 +178,12 @@ fn run() -> Result<()> {
         cursor: 0,
         doc_dir,
         renderer,
-        webview,
+        webview: Some(webview),
         window,
         watcher: None,
         answered: false,
+        pictures: clipboard::Pictures::new(),
+        lingering: false,
     };
     app.rewatch(&proxy);
 
@@ -195,14 +204,27 @@ fn run() -> Result<()> {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
-            } => *control_flow = ControlFlow::Exit,
+            }
+            | Event::UserEvent(UserEvent::Quit) => {
+                if app.quit() {
+                    *control_flow = ControlFlow::Exit;
+                }
+            }
+
+            // The last thing a window closed with a picture on the clipboard
+            // was waiting for. See `App::quit`.
+            Event::UserEvent(UserEvent::PictureReleased) => {
+                if app.lingering {
+                    *control_flow = ControlFlow::Exit;
+                }
+            }
 
             Event::WindowEvent {
                 event: WindowEvent::Resized(_),
                 ..
             } => app.remember_window(),
 
-            Event::UserEvent(UserEvent::Quit) => *control_flow = ControlFlow::Exit,
+            Event::UserEvent(UserEvent::CopyPicture(png)) => app.copy_picture(&png, &proxy),
 
             Event::UserEvent(UserEvent::Ready(geometry)) => app.ready(geometry),
             Event::UserEvent(UserEvent::Reveal) => app.reveal(None),
@@ -488,13 +510,22 @@ struct App {
     closed: bool,
     doc_dir: render::DocDir,
     renderer: Renderer,
-    webview: WebView,
+    /// `None` once the window has closed with a picture still on the
+    /// clipboard: the webview is most of what the process holds, and nothing
+    /// it would draw can be seen any more. See `quit`.
+    webview: Option<WebView>,
     window: Window,
     watcher: Option<FileWatcher>,
     /// True once the page has sent `ready`. Before that there is no page to
     /// tell anything to -- and nothing it was keeping has been read back yet,
     /// which a resize reported too early would overwrite.
     answered: bool,
+    /// Diagrams copied as pictures, held on the clipboard from here where the
+    /// clipboard would otherwise forget them. See clipboard.rs.
+    pictures: clipboard::Pictures,
+    /// True once the window has closed and the process stays on only to serve
+    /// a picture it put on the clipboard.
+    lingering: bool,
 }
 
 impl App {
@@ -565,7 +596,7 @@ impl App {
             state,
             fragment,
         );
-        let _ = self.webview.evaluate_script(&script);
+        self.script(&script);
     }
 
     /// Hand the rendered page to the platform's print dialog.
@@ -585,7 +616,54 @@ impl App {
         if self.current().is_none() {
             return;
         }
-        let _ = self.webview.print();
+        if let Some(webview) = &self.webview {
+            let _ = webview.print();
+        }
+    }
+
+    /// Run something in the page, while there is a page to run it in. There is
+    /// not once the window has closed with a picture on the clipboard, and
+    /// nothing is left then that needs telling.
+    fn script(&self, script: &str) {
+        if let Some(webview) = &self.webview {
+            let _ = webview.evaluate_script(script);
+        }
+    }
+
+    /// Close the window, and say whether the process should end with it.
+    ///
+    /// Not while a picture copied from here is still on the clipboard: on
+    /// Wayland it would go with the process, and a paste after Ctrl Q would
+    /// find nothing -- clipboard.rs says why. Then the window is hidden and the
+    /// webview dropped, which is most of what the process holds, and what is
+    /// left serves the picture until another program takes the clipboard over
+    /// and `PictureReleased` ends it. The same model wl-copy uses.
+    ///
+    /// Run with --foreground, that is also how long the terminal waits.
+    fn quit(&mut self) -> bool {
+        if !self.pictures.holding() {
+            return true;
+        }
+        self.lingering = true;
+        self.window.set_visible(false);
+        self.webview = None;
+        self.watcher = None;
+        false
+    }
+
+    /// A diagram the page drew as a PNG, to go on the clipboard from here. The
+    /// page is told how it went, since its button is the one that says so.
+    fn copy_picture(&self, encoded: &str, proxy: &EventLoopProxy<UserEvent>) {
+        let released = proxy.clone();
+        let copied = base64::decode(encoded).is_some_and(|png| {
+            self.pictures.put(png, move || {
+                let _ = released.send_event(UserEvent::PictureReleased);
+            })
+        });
+        self.script(&format!(
+            "window.__mark.pictureCopied({})",
+            serde_json::Value::from(copied)
+        ));
     }
 
     /// Follow a link. Markdown opens here; everything else goes to the desktop.
@@ -689,7 +767,7 @@ impl App {
             "window.__mark.setDragging({})",
             serde_json::Value::from(over)
         );
-        let _ = self.webview.evaluate_script(&script);
+        self.script(&script);
     }
 
     /// The page has loaded: show the window, at the size the page kept for it,
@@ -757,7 +835,7 @@ impl App {
                 "maximized": self.window.is_maximized(),
             })
         );
-        let _ = self.webview.evaluate_script(&script);
+        self.script(&script);
     }
 
     fn step(&mut self, delta: isize, proxy: &EventLoopProxy<UserEvent>) {
@@ -1100,6 +1178,9 @@ fn decode_message(body: &str) -> Option<UserEvent> {
         "back" => Some(UserEvent::Back),
         "forward" => Some(UserEvent::Forward),
         "open" => Some(UserEvent::Open(message.get("href")?.as_str()?.to_string())),
+        "copy-picture" => Some(UserEvent::CopyPicture(
+            message.get("png")?.as_str()?.to_string(),
+        )),
         _ => None,
     }
 }
@@ -1169,6 +1250,7 @@ fn build_shell() -> String {
         .replace("{{APP_URL}}", &protocol::url("/__mark__/app.js"))
         .replace("{{HELP}}", &help_html())
         .replace("{{VERSION}}", env!("CARGO_PKG_VERSION"))
+        .replace("{{COPY_PICTURES}}", clipboard::COPIED_BY)
 }
 
 /// Shown in place of the document when the file cannot be read -- during a save,
@@ -1304,12 +1386,12 @@ mod tests {
         assert!(types.len() > 5, "the page seems to send nothing: {types:?}");
 
         for name in types {
-            // `open` is the one that carries something with it, and a message
-            // without its href is rightly refused.
-            let body = if name == "open" {
-                format!("{{\"type\":\"{name}\",\"href\":\"mark://x\"}}")
-            } else {
-                format!("{{\"type\":\"{name}\"}}")
+            // `open` and `copy-picture` carry something with them, and a
+            // message without it is rightly refused.
+            let body = match name {
+                "open" => format!("{{\"type\":\"{name}\",\"href\":\"mark://x\"}}"),
+                "copy-picture" => format!("{{\"type\":\"{name}\",\"png\":\"iVBORw0KGgo=\"}}"),
+                _ => format!("{{\"type\":\"{name}\"}}"),
             };
             assert!(
                 decode_message(&body).is_some(),
@@ -1359,6 +1441,67 @@ mod tests {
                 "{id} is a button app.js never wires up"
             );
         }
+    }
+
+    /// The viewer is markup in shell.html, behaviour in app.js and a look in
+    /// style.css, held together by nothing but ids -- the shape of the empty
+    /// state, and so the same test. And it is fixed over the whole window, so
+    /// a diagram left open would print over the document it was taken from.
+    #[test]
+    fn the_diagram_viewer_is_wired_up() {
+        let shell = include_str!("assets/shell.html");
+        let js = include_str!("assets/app.js");
+        let css = include_str!("assets/style.css");
+
+        let ids: Vec<&str> = shell
+            .match_indices("id=\"viewer")
+            .filter_map(|(at, _)| shell[at + 4..].split('"').next())
+            .collect();
+
+        assert!(ids.len() >= 8, "the viewer is nearly gone: {ids:?}");
+
+        for id in ids {
+            assert!(
+                css.contains(&format!("#{id}")) || js.contains(&format!("\"{id}\"")),
+                "{id} is in the page and neither the stylesheet nor app.js uses it"
+            );
+        }
+
+        for id in ["viewer-in", "viewer-out", "viewer-fit", "viewer-copy", "viewer-close"] {
+            assert!(
+                js.contains(&format!("press(\"{id}\"")),
+                "{id} is a button app.js never wires up"
+            );
+        }
+
+        assert!(css.contains("#viewer[hidden]"), "the viewer never hides");
+
+        let print = &css[css.rfind("@media print").expect("no print block")..];
+        assert!(print.contains("#viewer,"), "an open diagram prints over the page");
+    }
+
+    /// Who puts a copied diagram on the clipboard is decided in Rust, per
+    /// platform, and read by the page off the shell. The two have to agree on
+    /// the word, or the page copies down a path this build does not take: a
+    /// button that says Copied over a clipboard with nothing new on it.
+    #[test]
+    fn the_page_is_told_who_copies_pictures() {
+        let shell = build_shell();
+        let js = include_str!("assets/app.js");
+
+        assert!(
+            ["mark", "webview"].contains(&clipboard::COPIED_BY),
+            "an answer app.js does not know: {}",
+            clipboard::COPIED_BY
+        );
+        assert!(
+            shell.contains(&format!("data-copy-pictures=\"{}\"", clipboard::COPIED_BY)),
+            "the shell does not say who copies pictures"
+        );
+        assert!(
+            js.contains("copyPictures === \"mark\""),
+            "app.js never asks who copies pictures"
+        );
     }
 
     /// Esc used to be a second way out, and the whole point of the change is

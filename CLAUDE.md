@@ -38,6 +38,8 @@ mark <file>
   |-- render.rs     Markdown -> HTML   (comrak + syntect)
   |-- protocol.rs   the mark:// scheme (embedded assets + local files)
   |-- watcher.rs    filesystem watch -> live reload
+  |-- clipboard.rs  a copied diagram, held on the clipboard (GTK)
+  |-- base64.rs     the pictures that cross into and out of the page as text
   '-- main.rs       window, webview, navigation history
 ```
 
@@ -106,6 +108,8 @@ Each of these is load-bearing. The comment above it says the same thing at more 
 | `#split` keeps `min-height: 0` under the bar | `src/assets/style.css:279` | a flex item will not shrink below its content, so the window scrolls instead of the document |
 | Build the window hidden; `App::reveal` shows it once `ready` has brought the kept size | `src/main.rs`, `run` and `App::reveal` | the window opens at the default size and jumps, already placed by the compositor for the wrong one |
 | Remember the window's size through `restorable_size`, not tao's `inner_size` | `src/main.rs`, `restorable_size` | on GTK the two disagree by the client-side shadows, and the window grows by them on every run |
+| End the process only when no picture copied from it is on the clipboard | `App::quit`, `src/clipboard.rs` | on Wayland the clipboard holds a promise, not a copy, and a diagram pasted after Ctrl Q is gone |
+| A diagram copied as a PNG carries its font inside it, from `diagram_font` | `src/protocol.rs`, `src/assets/app.js` (`diagramPicture`) | an SVG image cannot reach the page's fonts, so the labels come out in a substitute and overflow the boxes mermaid measured for Inter |
 | Draw every diagram once light and once dark; the stylesheet picks one | `src/assets/app.js:38`, `src/assets/style.css:701` | mermaid bakes its colours into the SVG, so `d` would need a redraw and a dark page would print dark |
 
 Two more are there because `render.unsafe = true` lets documents bring their own HTML: the
@@ -120,7 +124,8 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 60 tests: 31 in render.rs, 10 in protocol.rs, 19 in main.rs
+cargo test          # 67 tests: 31 in render.rs, 11 in protocol.rs, 21 in main.rs,
+                    # 3 in base64.rs, 1 in clipboard.rs
 cargo clippy
 cargo run -- examples/README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package
@@ -159,16 +164,20 @@ Things written down nowhere else:
   `localStorage` is a SQLite file, `~/.local/share/mark/localstorage/mark_localhost_0.localstorage`,
   table `ItemTable`, values in UTF-16LE. Write a key while `mark` is not running, launch
   it, end it after a few seconds, and read the key back: an unchanged `mark.window` is a
-  round trip with no drift. Back the file up first, because it holds the reader's own theme.
+  round trip with no drift. Back the file up first, because it holds the reader's own theme,
+  and restore it with care: the database is in WAL mode, so copying the main file back
+  while a `-wal` beside it survives lets the test's writes come back on the next launch.
+  Restore only with no `mark` and no `WebKitNetworkProcess` running, delete any `-wal`
+  and `-shm` next to it, and read it back to check.
 - Tests live inline in `#[cfg(test)] mod tests`. There is no `tests/` directory, and
-  `watcher.rs` has none. The nineteen in `main.rs` mostly guard something written down twice
+  `watcher.rs` has none. The twenty in `main.rs` mostly guard something written down twice
   or unreachable from Linux: the version against its section in `CHANGELOG.md` and
   against what the window and the landing page say it is, the
   settings `app.js` keeps against the ones it reads back,
   what `ready` may bring back about the window, the shortcut table (rendered into the terminal and the window,
   and the window's copy cannot be checked from a terminal), the file types the two
   installers claim -- against `MARKDOWN_EXTENSIONS` and against each other -- the sizes
-  inside the `.ico`, the bar's buttons against the ids `app.js` wires up, the print
+  inside the `.ico`, the bar's buttons and the diagram viewer's against the ids `app.js` wires up, the print
   rules that keep the bar off the paper, and what `docs/index.html` repeats: the
   shortcuts, the file types and the version.
 - Building on Linux needs `libwebkit2gtk-4.1-dev` and `libsoup-3.0-dev`; Rust 1.85 or newer.
@@ -231,6 +240,7 @@ see Ground rules.
 | Something remembered between runs | a `*_KEY` beside `THEME_KEY` in `src/assets/app.js`, read with `stored` and written with `store` -- `every_remembered_setting_is_read_back` fails on one that is only written. Nothing goes in a file of mark's own. The window's size is the one Rust takes part in: measured in `App::remember_window`, applied in `App::reveal` |
 | The file chooser | `pick_file` in `src/main.rs`, twice: GTK on Linux and `GetOpenFileNameW` on Windows. Neither pulls in a crate — `gtk` is already compiled by `tao` and `windows-sys` was already there. The Windows half only type-checks with the scratch-crate trick below |
 | The empty state | `#empty` in `src/assets/shell.html` -> `showEmpty` in `src/assets/app.js` -> the block in `src/assets/style.css` and its `@media print` entry -> `App::show`'s `None` arm, which fills the reopen button's label. `the_empty_state_is_wired_up` holds the three files together |
+| The diagram viewer | `#viewer` in `src/assets/shell.html` -> the viewer section of `src/assets/app.js` -> its block in `src/assets/style.css` and `#viewer` in the `@media print` list. `the_diagram_viewer_is_wired_up` holds the three together. Copying as a PNG is the picture section of `app.js`; the font the picture carries comes from `diagram_font` in `src/protocol.rs`. On GTK the picture goes to the clipboard from `src/clipboard.rs`, over the `copy-picture` message, and `App::quit` keeps the process alive while it is still there; `clipboard::COPIED_BY` is what tells the page which way to copy |
 | A new comrak extension | `Renderer::new` in `src/render.rs`, styling in `src/assets/style.css`, plus a test |
 | A newer KaTeX | `src/assets/katex/README.md` has the commands, the three properties the bundle has to keep, and the fonts to re-fetch |
 | Colours or typography | `src/assets/style.css`, every palette that declares the token -- `every_palette_declares_the_same_tokens` fails otherwise -- and both copies of the dark one |

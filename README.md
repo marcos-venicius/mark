@@ -134,7 +134,12 @@ practical way to see it — a document opened from Explorer never passes a promp
   and `> [!CAUTION]` callouts.
 - **Mermaid diagrams.** A ```` ```mermaid ```` fence is drawn where it stands,
   by a renderer compiled into the binary, so it works with no network. A fence
-  that will not parse keeps its source and says why.
+  that will not parse keeps its source and says why. Click a diagram, or press
+  <kbd>Enter</kbd> on it, and it opens over the window: drag to move it, the
+  wheel or <kbd>+</kbd> <kbd>-</kbd> to zoom, <kbd>0</kbd> to fit it again,
+  <kbd>Esc</kbd> to put it back. <kbd>Ctrl</kbd> <kbd>C</kbd> there, or the
+  copy button in its corner, puts it on the clipboard as a PNG — in the palette
+  on screen, with the page colour behind it.
 - **Maths.** `$x$` and `$$x$$`, `` $`x`$ `` and a ```` ```math ```` fence, typeset
   by a KaTeX compiled into the binary alongside the diagram renderer. A formula
   that will not parse is written out where it stands.
@@ -200,6 +205,8 @@ mark <file>
   |-- render.rs     Markdown -> HTML   (comrak + syntect)
   |-- protocol.rs   the mark:// scheme (embedded assets + local files)
   |-- watcher.rs    filesystem watch -> live reload
+  |-- clipboard.rs  a copied diagram, held on the clipboard (GTK)
+  |-- base64.rs     the pictures that cross into and out of the page as text
   '-- main.rs       window, webview, navigation history
 ```
 
@@ -276,6 +283,26 @@ for a redraw. Twice and not once per theme: Catppuccin and Gruvbox are dark
 pages, and the dark drawing reads correctly on both. A formula needs none of that: KaTeX lays it out as HTML and leaves
 the colour to the text around it, so one drawing is right in both palettes and on
 paper.
+
+Copying a diagram as a picture draws it as an SVG image onto a canvas, and an
+image reaches nothing outside itself — not the page's fonts, and not a
+`mark://` address. Left alone, its labels come out in whatever the system has
+instead of Inter and no longer fit the boxes mermaid measured for them. So the
+page's own Inter is written into the drawing first, as data URLs. The page
+cannot fetch the font files to encode them, because the policy below refuses
+every request, so `mark` hands them over already encoded, in a script it
+generates the first time a diagram is copied.
+
+On Linux the picture does not reach the clipboard through the page. Under
+Wayland the clipboard holds a promise from the program that copied, not a copy,
+so a diagram copied from a window that has since closed would paste as nothing.
+`mark` puts the picture there itself, through GTK, which also says when another
+program takes the clipboard over. Closing the window while the picture is still
+there hides the window and keeps the process running, serving the picture,
+until something else is copied — the model `wl-copy` uses. With
+`--foreground`, that is also how long the terminal waits. Windows keeps what is
+put on its clipboard after the program has gone, so there the page copies the
+picture itself.
 
 Because documents may contain inline HTML, the page runs under a Content Security
 Policy that permits local assets and remote images and nothing else — no scripts

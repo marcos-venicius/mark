@@ -25,6 +25,23 @@ Before 1.0.0 there were no numbers: a single release, `latest`, was rebuilt from
 `main` on every push, and the entries from then are headed by the date the work
 landed.
 
+## Unreleased
+
+### Added
+
+- **A diagram viewer.** Clicking a mermaid diagram, or pressing <kbd>Enter</kbd>
+  on one, opens it over the window: drag to move it, the wheel or <kbd>+</kbd>
+  <kbd>-</kbd> to zoom around the pointer, <kbd>0</kbd> to fit it again, and
+  <kbd>Esc</kbd> to put it back where it was. <kbd>D</kbd> still changes the
+  theme while it is open. Reloading the document closes it.
+- **Copy a diagram as a PNG**, from the viewer with <kbd>Ctrl</kbd>
+  <kbd>C</kbd> or its button, or from the copy button in the diagram's corner.
+  The picture is the palette on screen at twice the drawing's size, filled with
+  the page colour so that a dark diagram still reads pasted somewhere white, and
+  set in Inter like the page: the face travels inside the picture. On Linux the
+  picture stays pasteable after the window closes: `mark` goes on running out
+  of sight, holding it, until something else is copied.
+
 ## 1.0.0 — 2026-09-15
 
 The first numbered version: everything in the entries below this one, and what

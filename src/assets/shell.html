@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-copy-pictures="{{COPY_PICTURES}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -126,6 +126,23 @@
     <button id="find-prev" type="button" title="Previous (Shift+Enter)" aria-label="Previous match">&#8593;</button>
     <button id="find-next" type="button" title="Next (Enter)" aria-label="Next match">&#8595;</button>
     <button id="find-close" type="button" title="Close (Esc)" aria-label="Close">&#10005;</button>
+  </div>
+
+  <!-- A diagram opened over the window, to be moved about, zoomed and copied as a
+       picture. app.js moves the figure itself in here and back out again; the
+       canvas is only somewhere to hang it. Every button is also a key, and the
+       key is in its tooltip, the way the bar does it. -->
+  <div id="viewer" hidden>
+    <div id="viewer-stage" tabindex="-1">
+      <div id="viewer-canvas"></div>
+    </div>
+    <div id="viewer-bar">
+      <button id="viewer-out" type="button" title="Zoom out (-)" aria-label="Zoom out">&#8722;</button>
+      <button id="viewer-fit" type="button" title="Fit to the window (0)" aria-label="Fit to the window">100%</button>
+      <button id="viewer-in" type="button" title="Zoom in (+)" aria-label="Zoom in">+</button>
+      <button id="viewer-copy" type="button" title="Copy as a PNG picture (Ctrl C)">Copy PNG</button>
+      <button id="viewer-close" type="button" title="Close (Esc)" aria-label="Close">&#10005;</button>
+    </div>
   </div>
 
   <!-- The panel is built in Rust, from the table --help prints from, and dropped

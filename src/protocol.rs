@@ -150,6 +150,66 @@ fn unpacked(index: usize) -> &'static [u8] {
     })[index]
 }
 
+/// The page's own Inter, as a script that hands it to app.js with every face's
+/// address swapped for its bytes.
+///
+/// A diagram copied as a picture is drawn as an SVG *image*, and an image
+/// reaches nothing outside itself: not the `@font-face` rules of the page it
+/// came from, and not a `mark://` URL. Left alone, its labels come out in
+/// whatever the system substitutes for Inter, and no longer fit the boxes
+/// mermaid measured for them. So the faces have to travel inside the drawing,
+/// which means as text. The page cannot fetch the woff2 files and encode them
+/// itself -- `connect-src 'none'` refuses exactly that, on purpose -- but a
+/// script is something the policy does let it load, so the encoding is done
+/// here, once, the first time a diagram is copied.
+///
+/// The rules are read out of style.css rather than written a second time, so a
+/// face added there, or a range changed, reaches the picture too.
+const DIAGRAM_FONT: &str = "diagram-font.js";
+static DIAGRAM_FONT_BODY: OnceLock<Vec<u8>> = OnceLock::new();
+
+fn diagram_font() -> &'static [u8] {
+    DIAGRAM_FONT_BODY.get_or_init(|| {
+        let css = std::str::from_utf8(asset("style.css").unwrap_or_default()).unwrap_or_default();
+        let mut faces = String::new();
+
+        for rest in css.split("@font-face").skip(1) {
+            let Some(end) = rest.find('}') else {
+                continue;
+            };
+            let mut face = format!("@font-face{}", &rest[..=end]);
+            if !face.contains("\"Inter\"") {
+                continue;
+            }
+            for (name, _, bytes) in ASSETS {
+                let address = format!("url(\"{name}\")");
+                if face.contains(&address) {
+                    let inline = format!(
+                        "url(data:font/woff2;base64,{})",
+                        crate::base64::encode(bytes)
+                    );
+                    face = face.replace(&address, &inline);
+                }
+            }
+            faces.push_str(&face);
+        }
+
+        format!(
+            "window.__markDiagramFont = {};\n",
+            serde_json::Value::from(faces)
+        )
+        .into_bytes()
+    })
+}
+
+fn asset(name: &str) -> Option<&'static [u8]> {
+    ASSETS
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|(_, _, body)| *body)
+}
+
+
 /// Build a URL the webview will route back to our handler.
 ///
 /// The origin of a custom protocol differs per platform, which wry documents:
@@ -235,6 +295,9 @@ pub fn serve(
     }
 
     if let Some(name) = path.strip_prefix(ASSET_PREFIX) {
+        if name == DIAGRAM_FONT {
+            return ok(Cow::Borrowed(diagram_font()), "text/javascript; charset=utf-8");
+        }
         if let Some((_, mime, body)) = ASSETS.iter().find(|(n, _, _)| *n == name) {
             return ok(Cow::Borrowed(*body), mime);
         }
@@ -445,6 +508,29 @@ mod tests {
 
         assert_eq!(fragment_of(&file_url(path)), None);
         assert_eq!(fragment_of(&format!("{}#", file_url(path))), None);
+    }
+
+    /// A diagram copied as a picture can use only a font it carries inside it.
+    /// This is that font: the page's own Inter faces, both of them, with the
+    /// address of each swapped for its bytes -- one left pointing at a file is
+    /// a face the picture silently goes without.
+    #[test]
+    fn the_diagram_font_is_the_page_font_carried_inline() {
+        let response = serve(&request("/__mark__/diagram-font.js"), Path::new("/tmp"), "");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = std::str::from_utf8(response.body()).expect("a script is text");
+        assert!(
+            body.starts_with("window.__markDiagramFont = \""),
+            "not the script app.js waits for"
+        );
+        assert_eq!(body.matches("@font-face").count(), 2, "not both Inter faces");
+        assert_eq!(body.matches("data:font/woff2;base64,").count(), 2);
+        assert!(body.contains("unicode-range"), "the faces lost their ranges");
+        assert!(
+            !body.contains(".woff2"),
+            "a face still points at a file an image cannot reach"
+        );
     }
 
     #[test]

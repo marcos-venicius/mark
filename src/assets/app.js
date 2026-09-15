@@ -25,6 +25,11 @@
   var barPrint = document.getElementById("bar-print");
   var empty = document.getElementById("empty");
   var emptyReopen = document.getElementById("empty-reopen");
+  var viewer = document.getElementById("viewer");
+  var viewerStage = document.getElementById("viewer-stage");
+  var viewerCanvas = document.getElementById("viewer-canvas");
+  var viewerFit = document.getElementById("viewer-fit");
+  var viewerCopy = document.getElementById("viewer-copy");
 
   var BASE_FONT_SIZE = 16.5;
   var ZOOM_STEPS = [0.75, 0.85, 0.92, 1, 1.1, 1.25, 1.4, 1.6, 1.85];
@@ -216,6 +221,9 @@
   // the file -- `section` in other.md#section -- or null.
   window.__mark = {
     setContent: function (html, keepScroll, state, fragment) {
+      // A diagram open in the viewer belongs to the document about to be
+      // replaced. It goes back first, while there is still a place for it.
+      closeViewer();
       var offset = keepScroll ? page.scrollTop : 0;
       var mine = (generation += 1);
       applyState(state);
@@ -251,6 +259,13 @@
     // sends dozens, and maximising sends two -- the first with the new size and
     // the old state, because GTK reports the size before it reports why. Only
     // the last one is the truth.
+    // Rust's answer to a copy-picture message: whether the picture is on the
+    // clipboard now. The button that was pressed is the one that says so.
+    pictureCopied: function (copied) {
+      if (pictureButton) say(pictureButton, copied ? "Copied" : "Failed");
+      pictureButton = null;
+    },
+
     rememberWindow: function (geometry) {
       windowPending = geometry;
       clearTimeout(windowTimer);
@@ -373,13 +388,16 @@
 
   // The button says what happened and then goes back to being a button. The
   // timer is kept on the button itself so that a second copy restarts its own
-  // countdown rather than a shared one somebody else started.
+  // countdown rather than a shared one somebody else started. What it goes back
+  // to is whatever it said before, kept the first time: the viewer's button
+  // says "Copy PNG", not the code blocks' word.
   function say(button, message) {
+    if (!button.dataset.label) button.dataset.label = button.textContent;
     button.textContent = message;
     button.classList.add("said");
     clearTimeout(button.sayTimer);
     button.sayTimer = setTimeout(function () {
-      button.textContent = COPY_LABEL;
+      button.textContent = button.dataset.label;
       button.classList.remove("said");
     }, 1400);
   }
@@ -429,6 +447,12 @@
     var chain = Promise.resolve();
 
     figure.className = "diagram";
+    // A click opens it in the viewer, and so does Enter once it has the focus:
+    // nothing that does something should be reachable only with a pointer.
+    figure.tabIndex = 0;
+    figure.setAttribute("role", "button");
+    figure.setAttribute("aria-label", "Open the diagram");
+    figure.title = "Open to move, zoom and copy";
 
     DIAGRAM_PALETTES.forEach(function (palette) {
       chain = chain
@@ -463,6 +487,7 @@
     return chain
       .then(function () {
         if (mine !== generation) return;
+        addDiagramCopy(figure);
         pre.parentNode.insertBefore(figure, pre);
         pre.hidden = true;
       })
@@ -509,6 +534,371 @@
       element.onerror = reject;
       document.head.appendChild(element);
     });
+  }
+
+  // ----------------------------------------------------------------- viewer
+
+  // A diagram opened over the whole window, to be moved about and zoomed. The
+  // figure itself is moved in, and a placeholder of its height keeps its place
+  // in the document -- a copy would put every id in the drawing on the page
+  // twice, and mermaid finds its own styles and arrowheads by id. Moving it
+  // also keeps both drawings together, so d goes on switching between them.
+  //
+  // The zoom is a width rather than a scale(), so the drawing is laid out again
+  // at every size and stays sharp. Only the pan is a transform.
+  var VIEWER_MARGIN = 32;
+  var VIEWER_FIT_LARGEST = 2;
+  var VIEWER_SMALLEST = 0.1;
+  var VIEWER_LARGEST = 8;
+  var VIEWER_STEP = 1.25;
+
+  // The figure on show, the placeholder holding its place, and where it is: the
+  // zoom, and the offset of its corner from the stage's. null when closed.
+  var viewing = null;
+  var drag = null;
+
+  function openViewer(figure) {
+    if (viewing) return;
+    var placeholder = document.createElement("div");
+    placeholder.style.height = figure.offsetHeight + "px";
+    figure.parentNode.replaceChild(placeholder, figure);
+    viewerCanvas.appendChild(figure);
+    viewing = { figure: figure, placeholder: placeholder, scale: 1, x: 0, y: 0 };
+    viewer.hidden = false;
+    fitViewer();
+    viewerStage.focus();
+  }
+
+  // The figure goes back where it came from. setContent closes the viewer
+  // before replacing the document, so the placeholder is still there; were it
+  // not, there would be nowhere to put the figure, and it goes with the viewer.
+  function closeViewer() {
+    if (!viewing) return;
+    var shown = viewing;
+    viewing = null;
+    drag = null;
+    viewer.hidden = true;
+    viewerCanvas.removeAttribute("style");
+    viewerStage.classList.remove("dragging");
+    if (shown.placeholder.parentNode) {
+      shown.placeholder.parentNode.replaceChild(shown.figure, shown.placeholder);
+    } else {
+      viewerCanvas.removeChild(shown.figure);
+    }
+    page.focus();
+  }
+
+  // The one of the two drawings the stylesheet is showing.
+  function shownSvg(figure) {
+    var halves = figure.querySelectorAll(".diagram-light, .diagram-dark");
+    var index;
+    for (index = 0; index < halves.length; index += 1) {
+      if (getComputedStyle(halves[index]).display !== "none") return halves[index].querySelector("svg");
+    }
+    return figure.querySelector("svg");
+  }
+
+  // The size the drawing was made at, which is what 100% means. Read off the
+  // viewBox rather than the box on screen: in the document the column may have
+  // shrunk it, and in the viewer the zoom has changed it.
+  function naturalSize(svg) {
+    var box = svg.viewBox && svg.viewBox.baseVal;
+    if (box && box.width > 0 && box.height > 0) return { width: box.width, height: box.height };
+    var rect = svg.getBoundingClientRect();
+    return { width: rect.width || 1, height: rect.height || 1 };
+  }
+
+  function clampZoom(scale) {
+    return Math.max(VIEWER_SMALLEST, Math.min(VIEWER_LARGEST, scale));
+  }
+
+  // The whole drawing in view, centred, and at no more than twice its size: a
+  // small diagram blown up to fill a large window is more pixels than it is
+  // worth, and + is right there for anyone who wants them.
+  function fitViewer() {
+    if (!viewing) return;
+    var size = naturalSize(shownSvg(viewing.figure));
+    var stage = viewerStage.getBoundingClientRect();
+    viewing.scale = clampZoom(
+      Math.min(
+        (stage.width - 2 * VIEWER_MARGIN) / size.width,
+        (stage.height - 2 * VIEWER_MARGIN) / size.height,
+        VIEWER_FIT_LARGEST
+      )
+    );
+    viewing.x = (stage.width - size.width * viewing.scale) / 2;
+    viewing.y = (stage.height - size.height * viewing.scale) / 2;
+    placeViewer();
+  }
+
+  function placeViewer() {
+    var size = naturalSize(shownSvg(viewing.figure));
+    viewerCanvas.style.width = size.width * viewing.scale + "px";
+    viewerCanvas.style.transform = "translate(" + viewing.x + "px, " + viewing.y + "px)";
+    viewerFit.textContent = Math.round(viewing.scale * 100) + "%";
+  }
+
+  // By a factor, holding still whatever is under the point given, in the
+  // stage's own coordinates: the pointer for the wheel, the middle for keys.
+  function zoomViewer(factor, x, y) {
+    if (!viewing) return;
+    var scale = clampZoom(viewing.scale * factor);
+    var ratio = scale / viewing.scale;
+    viewing.x = x - (x - viewing.x) * ratio;
+    viewing.y = y - (y - viewing.y) * ratio;
+    viewing.scale = scale;
+    placeViewer();
+  }
+
+  function zoomViewerAtMiddle(factor) {
+    var stage = viewerStage.getBoundingClientRect();
+    zoomViewer(factor, stage.width / 2, stage.height / 2);
+  }
+
+  viewerStage.addEventListener("pointerdown", function (event) {
+    if (event.button !== 0 || !viewing) return;
+    drag = { pointer: event.pointerId, x: event.clientX - viewing.x, y: event.clientY - viewing.y };
+    viewerStage.setPointerCapture(event.pointerId);
+    viewerStage.classList.add("dragging");
+  });
+
+  viewerStage.addEventListener("pointermove", function (event) {
+    if (!drag || !viewing || event.pointerId !== drag.pointer) return;
+    viewing.x = event.clientX - drag.x;
+    viewing.y = event.clientY - drag.y;
+    placeViewer();
+  });
+
+  function endDrag(event) {
+    if (!drag || event.pointerId !== drag.pointer) return;
+    drag = null;
+    viewerStage.classList.remove("dragging");
+  }
+
+  viewerStage.addEventListener("pointerup", endDrag);
+  viewerStage.addEventListener("pointercancel", endDrag);
+
+  // Every turn of the wheel is a zoom in here, Ctrl or not: there is nothing to
+  // scroll. Exponential in the distance travelled, so that a touchpad's many
+  // small steps and a wheel's few large ones come to the same zoom for the same
+  // travel. A wheel that counts in lines is taken at a line's height.
+  viewerStage.addEventListener(
+    "wheel",
+    function (event) {
+      event.preventDefault();
+      if (!viewing) return;
+      var stage = viewerStage.getBoundingClientRect();
+      var travel = event.deltaY * (event.deltaMode === 1 ? 16 : 1);
+      travel = Math.max(-240, Math.min(240, travel));
+      zoomViewer(Math.exp(-travel * 0.002), event.clientX - stage.left, event.clientY - stage.top);
+    },
+    { passive: false }
+  );
+
+  // A diagram opens on a click. The copy button in its corner is the one part
+  // of it that does something else, and a link someone wrote into a label is
+  // followed rather than opened.
+  content.addEventListener("click", function (event) {
+    if (event.target.closest("a, button")) return;
+    var figure = event.target.closest(".diagram");
+    if (figure) openViewer(figure);
+  });
+
+  press("viewer-in", function () {
+    zoomViewerAtMiddle(VIEWER_STEP);
+  });
+  press("viewer-out", function () {
+    zoomViewerAtMiddle(1 / VIEWER_STEP);
+  });
+  press("viewer-fit", fitViewer);
+  press("viewer-copy", function () {
+    if (viewing) copyDiagram(viewing.figure, viewerCopy);
+  });
+  press("viewer-close", closeViewer);
+
+  // The viewer is modal, the way the help panel is: behind it a t or a / would
+  // act on a document nobody can see. d and D still reach the theme, because
+  // the drawing on show changes with it -- and so does the picture Ctrl C
+  // copies, which is whichever drawing that is.
+  function viewerKey(event, mod, key) {
+    if (mod && (key === "c" || key === "C")) {
+      event.preventDefault();
+      return copyDiagram(viewing.figure, viewerCopy);
+    }
+    if (mod || event.altKey) return;
+    if (key === "+" || key === "=") {
+      event.preventDefault();
+      return zoomViewerAtMiddle(VIEWER_STEP);
+    }
+    if (key === "-") {
+      event.preventDefault();
+      return zoomViewerAtMiddle(1 / VIEWER_STEP);
+    }
+    if (key === "0") {
+      event.preventDefault();
+      return fitViewer();
+    }
+    if (key === "d") {
+      event.preventDefault();
+      return cycleTheme();
+    }
+    if (key === "D") {
+      event.preventDefault();
+      return setTheme("system");
+    }
+  }
+
+  // ---------------------------------------------------------------- picture
+
+  var SVG_NS = "http://www.w3.org/2000/svg";
+
+  // Twice the drawing's own size, so that the picture stays sharp pasted into
+  // something that shows it larger -- but no side past 8192 pixels, which is
+  // about where a canvas stops agreeing to be made at all.
+  var PICTURE_SCALE = 2;
+  var PICTURE_LARGEST_SIDE = 8192;
+  var diagramFontLoading = null;
+
+  // The button waiting to hear from Rust whether its picture made it onto the
+  // clipboard. See pictureCopied.
+  var pictureButton = null;
+
+  // A copy button in the diagram's corner, beside the one every code block has.
+  function addDiagramCopy(figure) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "copy";
+    button.title = "Copy this diagram as a PNG picture";
+    button.textContent = COPY_LABEL;
+    button.addEventListener("click", function () {
+      copyDiagram(figure, button);
+    });
+    figure.appendChild(button);
+  }
+
+  // The picture goes to the clipboard as a promise, handed over inside the
+  // click, rather than drawn first and handed over after. WebKit lets a page
+  // write to the clipboard only while it is still answering a click, and the
+  // drawing outlasts that; a ClipboardItem holding a promise keeps the click's
+  // permission for as long as the picture takes to arrive.
+  function copyDiagram(figure, button) {
+    // Where the clipboard forgets what a program put on it once that program
+    // has gone -- Wayland -- mark holds the picture itself, and the page only
+    // draws it; clipboard.rs says why. Rust decides which, per platform, and
+    // writes the answer on the root element before the page loads.
+    if (document.documentElement.dataset.copyPictures === "mark") {
+      pictureButton = button;
+      diagramPicture(figure)
+        .then(blobBase64)
+        .then(
+          function (png) {
+            send({ type: "copy-picture", png: png });
+          },
+          function () {
+            pictureButton = null;
+            say(button, "Failed");
+          }
+        );
+      return;
+    }
+
+    if (typeof ClipboardItem === "undefined" || !navigator.clipboard || !navigator.clipboard.write) {
+      say(button, "Failed");
+      return;
+    }
+    navigator.clipboard.write([new ClipboardItem({ "image/png": diagramPicture(figure) })]).then(
+      function () {
+        say(button, "Copied");
+      },
+      function () {
+        say(button, "Failed");
+      }
+    );
+  }
+
+  // The drawing on show, as a PNG: at its own size and twice over, filled with
+  // the page colour it was drawn against, so that a dark diagram pasted into a
+  // white document still reads. It is drawn as an SVG image, which cannot reach
+  // the page's fonts, so the page's Inter is written into a copy of it first;
+  // protocol.rs says why that arrives as a script.
+  function diagramPicture(figure) {
+    var svg = shownSvg(figure);
+    var size = naturalSize(svg);
+    var scale = Math.min(PICTURE_SCALE, PICTURE_LARGEST_SIDE / size.width, PICTURE_LARGEST_SIDE / size.height);
+    var background = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#ffffff";
+
+    return loadDiagramFont().then(function (faces) {
+      var copy = svg.cloneNode(true);
+      copy.setAttribute("width", size.width);
+      copy.setAttribute("height", size.height);
+      copy.style.maxWidth = "";
+      var style = document.createElementNS(SVG_NS, "style");
+      style.textContent = faces;
+      copy.insertBefore(style, copy.firstChild);
+      return rasterise(copy, Math.round(size.width * scale), Math.round(size.height * scale), background);
+    });
+  }
+
+  function rasterise(svg, width, height, background) {
+    return new Promise(function (resolve, reject) {
+      var image = new Image();
+      image.onload = function () {
+        var canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        var context = canvas.getContext("2d");
+        context.fillStyle = background;
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+        // An engine that counts the drawing's HTML labels as foreign content
+        // refuses to hand the pixels back, and says so by throwing here.
+        try {
+          canvas.toBlob(function (blob) {
+            if (blob) resolve(blob);
+            else reject(new Error("the picture could not be encoded"));
+          }, "image/png");
+        } catch (error) {
+          reject(error);
+        }
+      };
+      image.onerror = function () {
+        reject(new Error("the diagram could not be drawn as a picture"));
+      };
+      image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    });
+  }
+
+  // A blob as the base64 Rust decodes: FileReader's data URL, less its prefix.
+  function blobBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        resolve(String(reader.result).split(",")[1] || "");
+      };
+      reader.onerror = function () {
+        reject(reader.error);
+      };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // Fetched the first time a diagram is copied, and once per window. A face
+  // that will not load is not worth refusing the copy over: the picture comes
+  // out in whatever the system has instead, and the next copy tries again.
+  function loadDiagramFont() {
+    if (diagramFontLoading) return diagramFontLoading;
+    var script = document.createElement("script");
+    script.src = "/__mark__/diagram-font.js";
+    diagramFontLoading = arrival(script).then(
+      function () {
+        return window.__markDiagramFont || "";
+      },
+      function () {
+        diagramFontLoading = null;
+        return "";
+      }
+    );
+    return diagramFontLoading;
   }
 
   // ------------------------------------------------------------------ maths
@@ -957,6 +1347,7 @@
       event.preventDefault();
       if (!help.hidden) closeHelp();
       else if (!themeMenu.hidden) closeThemeMenu();
+      else if (viewing) closeViewer();
       else if (!find.hidden) closeFind();
       // The last rung is the document itself, not the window. Esc arrives here
       // by being pressed once too often as much as on purpose, and the empty
@@ -987,6 +1378,10 @@
     // palettes while the menu went on ticking the entry it opened with. Its own
     // handler has already had the arrows by the time this runs.
     if (!themeMenu.hidden) return;
+
+    // Everything but Ctrl Q, which goes on quitting from the one place it is
+    // written below.
+    if (viewing && !(mod && key === "q")) return viewerKey(event, mod, key);
 
     if (mod) {
       switch (key) {
@@ -1029,6 +1424,10 @@
 
     if (typing || mod || event.altKey) return;
 
+    if ((key === "Enter" || key === " ") && document.activeElement.classList.contains("diagram")) {
+      event.preventDefault();
+      return openViewer(document.activeElement);
+    }
     if (key === "/") {
       event.preventDefault();
       return openFind();
