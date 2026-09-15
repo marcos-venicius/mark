@@ -120,7 +120,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 57 tests: 31 in render.rs, 10 in protocol.rs, 16 in main.rs
+cargo test          # 58 tests: 31 in render.rs, 10 in protocol.rs, 17 in main.rs
 cargo clippy
 cargo run -- examples/README.md
 ./install.sh        # release build, then binary + desktop entry + icon + MIME package
@@ -132,14 +132,16 @@ Things written down nowhere else:
 - `examples/` holds six linked documents covering everything the viewer renders,
   and `the_examples_point_at_files_that_are_really_there` follows every path in
   them. It is what `cargo run --` should open while working on the page.
-- `.github/workflows/windows.yml` is the only workflow. It builds the `.exe`, smoke-tests
-  `--version` through `Start-Process` (a GUI-subsystem program is not waited for, and
-  the redirected output is also the check that the inherited handle survived), reads
-  the headers with `dumpbin` to catch a stray `VCRUNTIME` or `WebView2Loader` and to
-  confirm the GUI subsystem, extracts the icon back out to prove `build.rs` embedded it,
-  builds `mark-setup-x64.exe` with `ISCC`, and rewrites the `latest` release in place
-  with both artefacts, its notes pointing at `CHANGELOG.md` on `main`. It does not run `cargo test`, `clippy` or `fmt`, and there is no
-  Linux CI at all.
+- `.github/workflows/windows.yml` is the only workflow. On a push to `main` it builds the
+  `.exe`, smoke-tests `--version` through `Start-Process` (a GUI-subsystem program is not
+  waited for, and the redirected output is also the check that the inherited handle
+  survived), reads the headers with `dumpbin` to catch a stray `VCRUNTIME` or
+  `WebView2Loader` and to confirm the GUI subsystem, extracts the icon back out to prove
+  `build.rs` embedded it, and builds `mark-setup-x64.exe` with `ISCC` -- a check, with
+  nothing published. On a tag `vX.Y.Z` it does the same, refuses a tag that disagrees
+  with what `mark --version` reports, cuts that version's section out of `CHANGELOG.md`
+  as the notes, and publishes both artefacts as the release, marked latest. It does not
+  run `cargo test`, `clippy` or `fmt`, and there is no Linux CI at all.
 - The Windows installer and the icon cannot be built or tested here. `ISCC` is
   Windows-only, so `windows/mark.iss` is checked by CI and by the tests that read it;
   `assets/mark.ico` is generated with ImageMagick (see `assets/README.md`) and committed,
@@ -159,8 +161,9 @@ Things written down nowhere else:
   it, end it after a few seconds, and read the key back: an unchanged `mark.window` is a
   round trip with no drift. Back the file up first, because it holds the reader's own theme.
 - Tests live inline in `#[cfg(test)] mod tests`. There is no `tests/` directory, and
-  `watcher.rs` has none. The sixteen in `main.rs` mostly guard something written down twice
-  or unreachable from Linux: the settings `app.js` keeps against the ones it reads back,
+  `watcher.rs` has none. The seventeen in `main.rs` mostly guard something written down twice
+  or unreachable from Linux: the version against its section in `CHANGELOG.md`, the
+  settings `app.js` keeps against the ones it reads back,
   what `ready` may bring back about the window, the shortcut table (rendered into the terminal and the window,
   and the window's copy cannot be checked from a terminal), the file types the two
   installers claim -- against `MARKDOWN_EXTENSIONS` and against each other -- the sizes
@@ -168,6 +171,26 @@ Things written down nowhere else:
   rules that keep the bar off the paper, and the two lists `docs/index.html` repeats,
   the shortcuts and the file types.
 - Building on Linux needs `libwebkit2gtk-4.1-dev` and `libsoup-3.0-dev`; Rust 1.85 or newer.
+
+## Releasing
+
+Versions follow Semantic Versioning. What counts as major, minor and patch for a
+viewer with no library API is written at the top of `CHANGELOG.md`: a command-line
+option, a claimed file type or a shortcut taken away is major. Changes land under
+`## Unreleased` in `CHANGELOG.md` as they are made. A release, only when it is asked for
+(see Ground rules):
+
+1. Rename `## Unreleased` to `## X.Y.Z — YYYY-MM-DD`.
+2. Set `version` in `Cargo.toml`, then `cargo build` so that `Cargo.lock` follows.
+   `the_changelog_has_a_section_for_this_version` fails until step 1 is done as well.
+3. Commit as `chore(release): X.Y.Z`, then `git tag -a vX.Y.Z -m "mark X.Y.Z"`.
+4. Push `main`, then the tag. The workflow does the rest, and refuses a tag that
+   disagrees with `Cargo.toml` or has no section in `CHANGELOG.md`.
+
+`Cargo.toml` is the one place the number is written: `mark --version`, the `.exe`'s
+resource and the installer's `AppVersion` all come from it. The download links in the
+README and on the landing page are `/releases/latest/download/...`, which follows the
+newest release on its own, so a release changes none of them.
 
 ## Style
 

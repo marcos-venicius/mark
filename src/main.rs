@@ -1456,6 +1456,23 @@ mod tests {
         }
     }
 
+    /// The number is written once, in Cargo.toml, and the release it becomes
+    /// takes its notes from CHANGELOG.md. A version bumped without a section
+    /// is a release the workflow refuses -- found out on a runner, after the
+    /// tag has been pushed, rather than here.
+    #[test]
+    fn the_changelog_has_a_section_for_this_version() {
+        let changelog = include_str!("../CHANGELOG.md");
+        let version = env!("CARGO_PKG_VERSION");
+
+        assert!(
+            changelog
+                .lines()
+                .any(|line| line.split(' ').take(2).eq(["##", version])),
+            "CHANGELOG.md has no `## {version}` section"
+        );
+    }
+
     #[test]
     fn the_bar_is_not_printed() {
         let css = include_str!("assets/style.css");

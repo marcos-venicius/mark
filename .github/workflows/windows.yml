@@ -1,15 +1,17 @@
-# Builds the Windows binary on every push to main and keeps it downloadable from
-# a single unchanging link: the "latest" release.
+# Builds the Windows binary. On a push to main that is a check and nothing more:
+# the build, the smoke test, the headers and the installer, with nothing
+# published. On a version tag -- v1.2.3 -- it is the release: the same steps,
+# then both artefacts published as that version and marked as the latest one,
+# which is what /releases/latest/download/... answers with.
 name: windows
 
 on:
   push:
     branches: [main]
-    # None of these reaches the .exe, and building for one of them is not
-    # merely wasted: the release is rewritten in place, so a typo fixed in a
-    # sentence would delete and recreate "latest" and move the tag onto a
-    # commit that changed nothing in it. A push touching one of these *and*
-    # something else still builds, which is the behaviour wanted.
+    # None of these reaches the .exe, so building for one of them proves
+    # nothing. A push touching one of these *and* something else still builds,
+    # which is the behaviour wanted. GitHub does not apply path filters to tag
+    # pushes at all, so a release always builds whatever it touched.
     paths-ignore:
       # Every Markdown file at the root is prose about the program rather than
       # part of it -- README, FUTURE, CLAUDE, and whatever comes next. A `*`
@@ -21,13 +23,19 @@ on:
       # Neither the git plumbing nor the landing page GitHub Pages serves.
       - .gitignore
       - docs/**
+    # Final semantic versions only. A prerelease such as v1.2.0-rc.1 would fail
+    # the smoke test's pattern anyway; it is left out here rather than
+    # published as the latest release by accident.
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
 
-# The release is rewritten in place, so two pushes landing together would race to
-# delete and recreate the same tag. Newer wins, older is cancelled.
+# One run per branch or tag. On main a newer push makes the older build
+# pointless, so it is cancelled; a release is never cut short halfway through
+# publishing.
 concurrency:
-  group: windows-latest-release
-  cancel-in-progress: true
+  group: windows-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: write
@@ -91,6 +99,19 @@ jobs:
           # The installer needs the same string, and this is the copy that has
           # just been proved to match what the binary reports.
           "MARK_VERSION=$($version -replace '^mark ', '')" >> $env:GITHUB_ENV
+
+      # The tag names the release and the binary names itself, and the two have
+      # to agree: otherwise the release called v1.2.0 hands out a program that
+      # says it is 1.1.0. Cargo.toml is where the binary's answer comes from, so
+      # a tag pushed without bumping it stops here.
+      - name: Check the tag against the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_NAME#v}" != "$MARK_VERSION" ]; then
+            echo "::error::the tag is $GITHUB_REF_NAME but mark reports $MARK_VERSION"
+            exit 1
+          fi
 
       # crt-static above and the static WebView2 loader are both invisible until
       # someone runs the .exe on a machine missing the file -- and this runner is
@@ -157,27 +178,38 @@ jobs:
           }
           Copy-Item windows/Output/mark-setup-x64.exe mark-setup-x64.exe
 
-      # Delete and recreate rather than upload over the top: --cleanup-tag moves
-      # the tag to this commit, so "latest" points at what it actually contains.
-      # bash, not pwsh: "|| true" on a first run where the release does not exist
-      # yet behaves the same in every shell version.
+      # The notes are this version's section of CHANGELOG.md, cut out rather
+      # than written a second time: everything from its `## X.Y.Z` heading to
+      # the next `## `. A tag with no section is refused -- a release nobody
+      # wrote down cannot be told apart from the one before it.
       #
-      # A full release rather than a prerelease: it is the only release there is,
-      # and it is what the README and the landing page send people to, so GitHub
-      # marking it "Latest" and answering /releases/latest with it is the
-      # behaviour wanted. What it is not is a version -- the tag moves, so the
-      # notes say which commit this build came from and where to read what
-      # changed. The link is to CHANGELOG.md on main rather than to a copy of it
-      # here, so it is right for whoever reads the release later.
-      - name: Publish to the latest release
+      # --latest because the newest version is what the README and the landing
+      # page send people to, through /releases/latest/download/..., which
+      # follows whichever release carries the mark. bash, not pwsh, for awk and
+      # for an exit status that behaves the same in every shell version.
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest mark-windows-x64.exe mark-setup-x64.exe \
-            --target "$GITHUB_SHA" \
-            --title "Latest build from main" \
-            --notes "Built from $GITHUB_SHA on $(date -u +%Y-%m-%d). This is the tip of \`main\`, rebuilt on every push, rather than a numbered version.
+          awk -v version="$MARK_VERSION" '
+            /^## / { if (inside) exit; if ($2 == version) { inside = 1; next } }
+            inside { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::CHANGELOG.md has no section for $MARK_VERSION"
+            exit 1
+          fi
 
-          What changed: [CHANGELOG.md](https://github.com/marcos-venicius/mark/blob/main/CHANGELOG.md)"
+          # A run started again for the same tag replaces the files rather than
+          # failing on a release that already exists.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" mark-windows-x64.exe mark-setup-x64.exe --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" mark-windows-x64.exe mark-setup-x64.exe \
+              --verify-tag \
+              --latest \
+              --title "mark $MARK_VERSION" \
+              --notes-file notes.md
+          fi

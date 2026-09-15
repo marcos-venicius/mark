@@ -61,9 +61,9 @@ cp target/release/mark ~/.local/bin/
 ```
 
 **Windows.** Download `mark-setup-x64.exe` from the
-[`latest` release](https://github.com/marcos-venicius/mark/releases/tag/latest),
-which is rebuilt from `main` on every push;
-[CHANGELOG.md](CHANGELOG.md) says what is in it. It installs for the current user
+[latest release](https://github.com/marcos-venicius/mark/releases/latest). Releases
+are numbered with [Semantic Versioning](https://semver.org), and
+[CHANGELOG.md](CHANGELOG.md) says what is in each one. It installs for the current user
 only — `%LOCALAPPDATA%\Programs\mark`, no administrator prompt, an entry in the
 Start Menu, and an uninstaller in "Installed apps" that takes the registry keys
 with it.

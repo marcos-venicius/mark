@@ -4,12 +4,31 @@ What changed, and why where the why is not obvious. `README.md` says what `mark`
 does today and `FUTURE.md` what it deliberately does not; this file is only the
 record of how it got here.
 
-There is one release, `latest`, and it is not a version: it is rebuilt from `main`
-on every push and the tag moves with it. So nothing here waits to be released --
-whatever is on `main` is what the download gives you -- and entries are headed
-with the date the work landed rather than with a number.
+Versions follow [Semantic Versioning](https://semver.org). Each one is a tag --
+`v1.0.0` -- whose release on GitHub carries the Windows downloads and is marked
+as the latest. What counts as a break is whatever a reader or a script has come
+to rely on:
 
-## 2026-09-15
+- **Major** -- something that worked stops working, or works differently: a
+  command-line option removed or given a new meaning, a file type no longer
+  claimed, a shortcut taken away or moved to another key.
+- **Minor** -- something new, with nothing old changed: a feature, a shortcut, a
+  theme, a file type.
+- **Patch** -- a fix, and nothing a reader has to learn.
+
+Work lands under an `## Unreleased` heading at the top of this file, and a
+release renames that heading to its number and date. The section under a
+version is also the text of its release on GitHub, cut out of this file by the
+workflow rather than written twice.
+
+Before 1.0.0 there were no numbers: a single release, `latest`, was rebuilt from
+`main` on every push, and the entries from then are headed by the date the work
+landed.
+
+## 1.0.0 — 2026-09-15
+
+The first numbered version: everything in the entries below this one, and what
+follows here.
 
 Two of the smaller ideas in `FUTURE.md`: a link that names a heading in another
 file lands on it, and the window comes back the way it was left.
@@ -27,6 +46,10 @@ file lands on it, and the window comes back the way it was left.
 
 ### Changed
 
+- **Releases are numbered.** Each version is a tag, and its release -- marked as
+  the latest -- carries the Windows downloads, with this file's section for it
+  as the notes. `main` is no longer published on every push; it is still built,
+  as a check. The download links follow the newest version on their own.
 - **The window appears once the page has loaded** rather than as soon as it
   exists, so that it opens at the remembered size instead of jumping to it. It
   no longer flashes white before a dark theme, either.

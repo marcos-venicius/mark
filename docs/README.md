@@ -27,7 +27,8 @@ Notes for whoever changes it next:
 - Nothing is fetched from anywhere else. No CDN, no analytics, no web font
   service -- the same rule the window keeps with its Content Security Policy.
 - `docs/**` is in the `paths-ignore` of `.github/workflows/windows.yml`, so a
-  change here does not rebuild the `.exe` or move the `latest` tag.
+  change here does not rebuild the `.exe`. Nor does it reach a release: those are
+  cut from version tags, and the page's download links follow the newest one.
 - Three tests guard what this page repeats from elsewhere: the shortcut table
   and the file types the installers claim, both in `src/main.rs`, and the list of
   palettes in the corner, which `the_landing_page_offers_the_same_themes` in
