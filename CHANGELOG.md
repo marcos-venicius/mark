@@ -43,6 +43,9 @@ file lands on it, and the window comes back the way it was left.
   the sidebar (<kbd>T</kbd>) and the wide measure (<kbd>Z</kbd>), beside the
   theme it already kept. All of it is in the webview's own storage; `mark` still
   writes no file of its own.
+- **The version is on show**: under the buttons of the empty window, as well as
+  in the title of the help panel where it already was, and at the top of the
+  landing page.
 
 ### Changed
 

@@ -530,6 +530,14 @@ body {
 #empty-reopen { color: var(--muted); }
 #empty-reopen[hidden] { display: none; }
 
+/* Set apart from the buttons and quieter than the hint: it answers a question
+   only a few readers ask, and none of them while choosing a file. */
+#empty-version {
+  margin: 1.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 /* A file is over the window. Rust says so -- see setDragging in app.js -- and
    the outline is drawn inside the edge so that it does not move the document
    underneath it by a pixel. */

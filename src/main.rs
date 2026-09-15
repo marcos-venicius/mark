@@ -1168,6 +1168,7 @@ fn build_shell() -> String {
         .replace("{{STYLE_URL}}", &protocol::url("/__mark__/style.css"))
         .replace("{{APP_URL}}", &protocol::url("/__mark__/app.js"))
         .replace("{{HELP}}", &help_html())
+        .replace("{{VERSION}}", env!("CARGO_PKG_VERSION"))
 }
 
 /// Shown in place of the document when the file cannot be read -- during a save,
@@ -1633,5 +1634,38 @@ mod tests {
                 "{claimed} is registered but docs/index.html never mentions it"
             );
         }
+    }
+
+    /// The window says which version it is in two places -- the help panel's
+    /// title and the line under the empty state's buttons -- and both are
+    /// filled in from Cargo.toml as the shell is built, so neither can fall
+    /// behind a release.
+    #[test]
+    fn the_window_names_its_version() {
+        let shell = build_shell();
+        let named = format!("mark {}", env!("CARGO_PKG_VERSION"));
+
+        assert!(
+            shell.contains(&format!("<h2 id=\"help-title\">{named}</h2>")),
+            "the help panel does not say {named}"
+        );
+        assert!(
+            shell.contains(&format!("<p id=\"empty-version\">{named}</p>")),
+            "the empty state does not say {named}"
+        );
+    }
+
+    /// The landing page is static and fetches nothing, so its version is the
+    /// one copy written by hand -- and a page still announcing the previous
+    /// release is noticed by nobody working on the viewer.
+    #[test]
+    fn the_landing_page_names_this_version() {
+        let page = include_str!("../docs/index.html");
+        let version = format!("<b>v{}</b>", env!("CARGO_PKG_VERSION"));
+
+        assert!(
+            page.contains(&version),
+            "docs/index.html does not announce {version}"
+        );
     }
 }

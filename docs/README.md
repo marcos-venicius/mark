@@ -29,8 +29,9 @@ Notes for whoever changes it next:
 - `docs/**` is in the `paths-ignore` of `.github/workflows/windows.yml`, so a
   change here does not rebuild the `.exe`. Nor does it reach a release: those are
   cut from version tags, and the page's download links follow the newest one.
-- Three tests guard what this page repeats from elsewhere: the shortcut table
-  and the file types the installers claim, both in `src/main.rs`, and the list of
+- Four tests guard what this page repeats from elsewhere: the shortcut table,
+  the file types the installers claim and the version in the hero tag, all three
+  in `src/main.rs`, and the list of
   palettes in the corner, which `the_landing_page_offers_the_same_themes` in
   `src/render.rs` reads straight out of `index.html` and compares against the
   window's own menu. The five names in the pre-paint script in the `<head>` are a

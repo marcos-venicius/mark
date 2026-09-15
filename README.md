@@ -92,7 +92,8 @@ mark --version    Show the version
 ```
 
 With no file, the window opens on the empty state: a message, a button that
-opens the desktop's own file chooser, and whatever was last closed offered back.
+opens the desktop's own file chooser, whatever was last closed offered back, and
+the version underneath.
 A Markdown file dropped anywhere on the window opens too, whether there is a
 document in it already or not. <kbd>Esc</kbd> closes the document and comes back
 here rather than quitting, so a stray press costs one click; <kbd>Ctrl</kbd>
