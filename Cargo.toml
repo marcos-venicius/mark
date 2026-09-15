@@ -1,6 +1,6 @@
 [package]
 name = "mark"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 rust-version = "1.85"
 description = "A single-purpose Markdown viewer: mark <file> opens a window and renders it."

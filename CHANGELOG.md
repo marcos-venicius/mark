@@ -25,7 +25,10 @@ Before 1.0.0 there were no numbers: a single release, `latest`, was rebuilt from
 `main` on every push, and the entries from then are headed by the date the work
 landed.
 
-## Unreleased
+## 1.1.0 — 2026-09-15
+
+Diagrams can be taken out of the document: opened over the window, moved
+about, zoomed, and copied as pictures.
 
 ### Added
 
