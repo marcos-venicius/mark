@@ -24,7 +24,7 @@
      names. "system" is the absence of the attribute rather than a value of it,
      which is what leaves the media query in charge. The inline script in the
      <head> repeats the list, because it runs before this file arrives. */
-  var THEMES = ["system", "light", "dark", "catppuccin-mocha", "gruvbox-dark"];
+  var THEMES = ["system", "light", "dark", "catppuccin-mocha", "gruvbox-dark", "blacksite"];
 
   /* What was chosen, which with "system" is not what is on screen: the desktop
      decides that, and the menu ticks the choice rather than the result. */

@@ -205,6 +205,36 @@
   color-scheme: dark;
 }
 
+/* Blacksite, the near-black green-phosphor theme from the reader's Helix, with
+   the names from its [palette] beside each value. Helix's dim (#4f6257) is the
+   comment colour there and too faint for running text here, so muted is its
+   operator grey instead. The syntax colours are built from the same palette by
+   blacksite_theme in render.rs, since bat ships no such theme. */
+:root[data-theme="blacksite"] {
+  --bg: #070a09;              /* bg */
+  --sidebar-bg: #030504;      /* void */
+  --surface: #0c110f;         /* panel */
+  --surface-strong: #111915;  /* line */
+  --border: #1a2620;          /* edge */
+  --border-strong: #2f3d35;   /* mute */
+  --text: #b4c4b9;            /* fg */
+  --text-soft: #9fb3a6;       /* member */
+  --muted: #8aa293;           /* op */
+  --link: #5cc8cf;            /* cyan */
+  --accent: #39d98a;          /* green */
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  --selection: rgba(57, 217, 138, 0.22);
+  --backdrop: rgba(3, 5, 4, 0.7);
+
+  --note: #5cc8cf;
+  --tip: #39d98a;
+  --important: #a07fc9;       /* violet */
+  --warning: #c9b06a;         /* amber */
+  --caution: #e5535b;         /* red */
+
+  color-scheme: dark;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -773,8 +803,8 @@ pre[data-lang]::before {
    mermaid writes its colours into the SVG: which one a reader sees is settled
    here rather than at render time, and switching theme costs nothing.
 
-   Twice, not once per palette: Catppuccin and Gruvbox are dark pages and the
-   dark drawing reads correctly on both. A drawing of their own would be a third
+   Twice, not once per palette: Catppuccin, Gruvbox and Blacksite are dark
+   pages and the dark drawing reads correctly on all three. A drawing of their own would be a third
    and a fourth render of every fence for a diagram nobody would call wrong
    without the two side by side.
 
@@ -827,6 +857,8 @@ pre[data-lang]::before {
 :root[data-theme="catppuccin-mocha"] .diagram-dark { display: block; }
 :root[data-theme="gruvbox-dark"] .diagram-light { display: none; }
 :root[data-theme="gruvbox-dark"] .diagram-dark { display: block; }
+:root[data-theme="blacksite"] .diagram-light { display: none; }
+:root[data-theme="blacksite"] .diagram-dark { display: block; }
 
 /* Said above the fence mermaid refused, which app.js leaves where it was: the
    text someone wrote is more use than a gap where a diagram should be. */
@@ -1179,7 +1211,8 @@ tbody tr:nth-child(even) { background: var(--surface); }
   :root:not([data-theme]),
   :root[data-theme="dark"],
   :root[data-theme="catppuccin-mocha"],
-  :root[data-theme="gruvbox-dark"] {
+  :root[data-theme="gruvbox-dark"],
+  :root[data-theme="blacksite"] {
     --bg: #ffffff;
     --sidebar-bg: #ffffff;
     --surface: #f6f7f9;
@@ -1268,13 +1301,15 @@ tbody tr:nth-child(even) { background: var(--surface); }
   :root:not([data-theme]) .diagram-light,
   :root[data-theme="dark"] .diagram-light,
   :root[data-theme="catppuccin-mocha"] .diagram-light,
-  :root[data-theme="gruvbox-dark"] .diagram-light { display: block; }
+  :root[data-theme="gruvbox-dark"] .diagram-light,
+  :root[data-theme="blacksite"] .diagram-light { display: block; }
 
   :root .diagram-dark,
   :root:not([data-theme]) .diagram-dark,
   :root[data-theme="dark"] .diagram-dark,
   :root[data-theme="catppuccin-mocha"] .diagram-dark,
-  :root[data-theme="gruvbox-dark"] .diagram-dark { display: none; }
+  :root[data-theme="gruvbox-dark"] .diagram-dark,
+  :root[data-theme="blacksite"] .diagram-dark { display: none; }
 
   p { orphans: 2; widows: 2; }
 

@@ -25,6 +25,13 @@ Before 1.0.0 there were no numbers: a single release, `latest`, was rebuilt from
 `main` on every push, and the entries from then are headed by the date the work
 landed.
 
+## Unreleased
+
+A sixth theme, Blacksite: near-black with green phosphor, the palette of the
+Helix theme of the same name. bat ships no syntax theme for it, so the code
+colours are built from that same palette, mapping each Helix scope onto the
+TextMate one that carries it.
+
 ## 1.1.0 — 2026-09-15
 
 Diagrams can be taken out of the document: opened over the window, moved

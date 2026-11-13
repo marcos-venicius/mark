@@ -161,7 +161,7 @@ practical way to see it — a document opened from Explorer never passes a promp
 - **Bundled typography** — Inter for text, JetBrains Mono for code, compiled into
   the binary so a document reads the same on a machine that has neither. See
   [src/assets/fonts/README.md](src/assets/fonts/README.md).
-- **Five themes** — light, dark, Catppuccin Mocha and Gruvbox Dark, or the
+- **Six themes** — light, dark, Catppuccin Mocha, Gruvbox Dark and Blacksite, or the
   system, which it follows by default and switches with while the window is open.
   The button in the bar opens the list; <kbd>D</kbd> walks it and the choice is
   remembered between runs, and <kbd>Shift</kbd> <kbd>D</kbd> goes back to
@@ -223,8 +223,9 @@ language, which is exactly the sort of thing nobody notices for months.
 
 Light and dark are written twice each, once for the system asking and once for
 the reader picking, because a media query cannot be folded into an attribute
-selector. Catppuccin and Gruvbox need one copy apiece: no desktop asks for them
-by name.
+selector. Catppuccin, Gruvbox and Blacksite need one copy apiece: no desktop asks for
+them by name. Blacksite is a Helix theme with no counterpart in bat, so its
+syntax colours are a small theme built in code from the same palette.
 
 The fork that detaches from the terminal happens before anything starts a thread
 or touches GTK. Forking past either leaves the child holding locks that nothing
@@ -279,8 +280,8 @@ of them. mermaid writes its colours into the SVG it produces, so a diagram is a
 picture of the theme it was drawn in; the alternative to keeping both is
 redrawing every diagram when the reader presses <kbd>D</kbd> — and having nothing
 to put on paper when a dark page is printed, since the print dialog cannot wait
-for a redraw. Twice and not once per theme: Catppuccin and Gruvbox are dark
-pages, and the dark drawing reads correctly on both. A formula needs none of that: KaTeX lays it out as HTML and leaves
+for a redraw. Twice and not once per theme: Catppuccin, Gruvbox and Blacksite
+are dark pages, and the dark drawing reads correctly on all three. A formula needs none of that: KaTeX lays it out as HTML and leaves
 the colour to the text around it, so one drawing is right in both palettes and on
 paper.
 

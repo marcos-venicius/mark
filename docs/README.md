@@ -10,7 +10,7 @@ That is the only step, and it is the repository owner's to take.
 Notes for whoever changes it next:
 
 - The palettes are the app's own, copied token for token from
-  `src/assets/style.css` -- light, dark, Catppuccin Mocha and Gruvbox Dark, with
+  `src/assets/style.css` -- light, dark, Catppuccin Mocha, Gruvbox Dark and Blacksite, with
   the dark one written out twice for the same reason it is there. Each carries a
   `--syn-*` set as well, which the app has no use for: there is no syntect here,
   so the code in the mock is highlighted by hand, once per palette. A colour

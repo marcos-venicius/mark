@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use comrak::plugins::syntect::{SyntectAdapter, SyntectAdapterBuilder};
 use comrak::{markdown_to_html_with_plugins, Options};
+use syntect::highlighting::Theme;
 use syntect::html::ClassStyle;
 use two_face::theme::EmbeddedThemeName;
 
@@ -43,10 +44,16 @@ const LIGHT_CHOSEN: &str = ":root[data-theme=\"light\"]";
 const DARK_CHOSEN: &str = ":root[data-theme=\"dark\"]";
 const CATPPUCCIN_CHOSEN: &str = ":root[data-theme=\"catppuccin-mocha\"]";
 const GRUVBOX_CHOSEN: &str = ":root[data-theme=\"gruvbox-dark\"]";
+const BLACKSITE_CHOSEN: &str = ":root[data-theme=\"blacksite\"]";
 
 /// The palettes a printer has to be talked out of, which is every one that is
 /// not already the light one.
-const DARK_CHOSEN_ALL: &[&str] = &[DARK_CHOSEN, CATPPUCCIN_CHOSEN, GRUVBOX_CHOSEN];
+const DARK_CHOSEN_ALL: &[&str] = &[
+    DARK_CHOSEN,
+    CATPPUCCIN_CHOSEN,
+    GRUVBOX_CHOSEN,
+    BLACKSITE_CHOSEN,
+];
 
 pub struct Renderer {
     options: Options<'static>,
@@ -138,16 +145,22 @@ impl Renderer {
     /// in the file, so it wins on order -- which is what the `@media print` block
     /// in style.css does for the rest of the page.
     ///
-    /// Seven copies of a syntax theme come to about 175 KB, which is the largest
+    /// Blacksite is the exception to "a theme bat ships": it is a Helix theme
+    /// with no TextMate counterpart, so `blacksite_theme` builds one from the
+    /// same palette. It colours fewer scopes than a bat theme does, which makes
+    /// its copy the smallest of the lot.
+    ///
+    /// Eight copies of a syntax theme come to about 180 KB, which is the largest
     /// thing in the shell by some way. It is built once, at startup, and costs
-    /// the binary nothing: two-face carries every theme either way. A fifth
-    /// palette would add roughly 25 KB more.
+    /// the binary nothing: two-face carries every theme either way. Another
+    /// palette from bat would add roughly 25 KB more.
     pub fn syntax_css() -> String {
         let themes = two_face::theme::extra();
         let light = theme_css(&themes, LIGHT_THEME);
         let dark = theme_css(&themes, DARK_THEME);
         let catppuccin = theme_css(&themes, CATPPUCCIN_THEME);
         let gruvbox = theme_css(&themes, GRUVBOX_THEME);
+        let blacksite = css_for(&blacksite_theme());
 
         // One copy of the light theme covers all of print, rather than one per
         // selector, because `scope` takes the whole list at once.
@@ -157,7 +170,7 @@ impl Renderer {
         format!(
             "@media (prefers-color-scheme: light) {{\n{}}}\n\
              @media (prefers-color-scheme: dark) {{\n{}}}\n\
-             {}\n{}\n{}\n{}\n\
+             {}\n{}\n{}\n{}\n{}\n\
              @media print {{\n{}}}",
             scope(&light, &[BY_DEFAULT]),
             scope(&dark, &[BY_DEFAULT]),
@@ -165,6 +178,7 @@ impl Renderer {
             scope(&dark, &[DARK_CHOSEN]),
             scope(&catppuccin, &[CATPPUCCIN_CHOSEN]),
             scope(&gruvbox, &[GRUVBOX_CHOSEN]),
+            scope(&blacksite, &[BLACKSITE_CHOSEN]),
             scope(&light, &printed),
         )
     }
@@ -179,8 +193,105 @@ impl Renderer {
 }
 
 fn theme_css(themes: &two_face::theme::EmbeddedLazyThemeSet, name: EmbeddedThemeName) -> String {
-    syntect::html::css_for_theme_with_class_style(themes.get(name), HL_CLASS_STYLE)
-        .expect("bundled theme is well-formed")
+    css_for(themes.get(name))
+}
+
+fn css_for(theme: &Theme) -> String {
+    syntect::html::css_for_theme_with_class_style(theme, HL_CLASS_STYLE)
+        .expect("a theme with no colours is still valid CSS")
+}
+
+/// Blacksite, the near-black green-phosphor theme from the reader's Helix,
+/// as a syntect theme.
+///
+/// Helix names what tree-sitter found; syntect colours TextMate scopes. The
+/// two vocabularies mostly line up word for word -- `keyword`, `string`,
+/// `comment` -- and where they do not, each line below is the TextMate scope
+/// that carries what the Helix key meant. Built in code rather than loaded
+/// from a `.tmTheme` because loading one needs syntect's plist feature, a
+/// dependency for one file, and a typo in a scope here fails a test instead
+/// of an XML parse at startup.
+///
+/// The colours are the `[palette]` of `blacksite.toml` and are repeated in the
+/// `blacksite` block of style.css; change one, change the other.
+fn blacksite_theme() -> Theme {
+    use std::str::FromStr;
+    use syntect::highlighting::{
+        Color, FontStyle, ScopeSelectors, StyleModifier, ThemeItem, ThemeSettings,
+    };
+
+    fn hex(rgb: u32) -> Color {
+        let [_, r, g, b] = rgb.to_be_bytes();
+        Color { r, g, b, a: 0xff }
+    }
+
+    const FG: u32 = 0xb4c4b9;
+    const DIM: u32 = 0x4f6257;
+    const OP: u32 = 0x8aa293;
+    const MEMBER: u32 = 0x9fb3a6;
+    const GREEN: u32 = 0x39d98a;
+    const CYAN: u32 = 0x5cc8cf;
+    const BLUE: u32 = 0x6f9fc4;
+    const AMBER: u32 = 0xc9b06a;
+    const ORANGE: u32 = 0xd9844a;
+    const RED: u32 = 0xe5535b;
+    const VIOLET: u32 = 0xa07fc9;
+
+    let none = FontStyle::empty();
+    // Later items win over earlier ones on a tie, so the specific scopes come
+    // after the general ones they refine.
+    let rules: &[(&str, u32, FontStyle)] = &[
+        ("comment, punctuation.definition.comment", DIM, FontStyle::ITALIC),
+        ("keyword, storage", GREEN, none),
+        ("keyword.operator, punctuation", OP, none),
+        ("string, punctuation.definition.string", AMBER, none),
+        ("string.regexp, string.other.link", ORANGE, none),
+        ("constant, variable.language", ORANGE, none),
+        ("constant.character.escape", VIOLET, none),
+        ("entity.name.function, support.function, meta.function-call.identifier", CYAN, none),
+        ("entity.name.function.macro, support.macro, meta.preprocessor", VIOLET, none),
+        (
+            "entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, \
+             entity.name.trait, entity.name.namespace, entity.name.module, \
+             support.type, support.class, entity.other.inherited-class",
+            BLUE,
+            none,
+        ),
+        ("variable, variable.parameter", FG, none),
+        ("variable.other.member, variable.other.property, meta.property-name, support.type.property-name", MEMBER, none),
+        ("entity.other.attribute-name, meta.attribute, meta.annotation, entity.name.label", VIOLET, none),
+        ("entity.name.tag", GREEN, none),
+        ("markup.heading, markup.heading entity.name", GREEN, FontStyle::BOLD),
+        ("markup.bold", FG, FontStyle::BOLD),
+        ("markup.italic", FG, FontStyle::ITALIC),
+        ("markup.underline.link", CYAN, FontStyle::UNDERLINE),
+        ("markup.raw", AMBER, none),
+        ("markup.list punctuation.definition", GREEN, none),
+        ("markup.quote", DIM, FontStyle::ITALIC),
+        ("markup.inserted", GREEN, none),
+        ("markup.deleted, invalid", RED, none),
+        ("markup.changed", AMBER, none),
+    ];
+
+    Theme {
+        name: Some("Blacksite".to_owned()),
+        author: None,
+        settings: ThemeSettings {
+            foreground: Some(hex(FG)),
+            ..ThemeSettings::default()
+        },
+        scopes: rules
+            .iter()
+            .map(|&(scope, colour, font_style)| ThemeItem {
+                scope: ScopeSelectors::from_str(scope).expect("a valid scope selector"),
+                style: StyleModifier {
+                    foreground: Some(hex(colour)),
+                    background: None,
+                    font_style: (!font_style.is_empty()).then_some(font_style),
+                },
+            })
+            .collect(),
+    }
 }
 
 /// Restrict every rule in a generated stylesheet to one or more scopes.
@@ -579,6 +690,7 @@ mod tests {
             DARK_CHOSEN,
             CATPPUCCIN_CHOSEN,
             GRUVBOX_CHOSEN,
+            BLACKSITE_CHOSEN,
         ] {
             assert!(css.contains(scope), "missing {scope}");
         }
@@ -590,8 +702,10 @@ mod tests {
     #[test]
     fn every_palette_is_a_different_set_of_colours() {
         let themes = two_face::theme::extra();
-        let all = [LIGHT_THEME, DARK_THEME, CATPPUCCIN_THEME, GRUVBOX_THEME]
-            .map(|name| theme_css(&themes, name));
+        let mut all = [LIGHT_THEME, DARK_THEME, CATPPUCCIN_THEME, GRUVBOX_THEME]
+            .map(|name| theme_css(&themes, name))
+            .to_vec();
+        all.push(css_for(&blacksite_theme()));
 
         for (index, one) in all.iter().enumerate() {
             for other in &all[index + 1..] {
@@ -666,7 +780,13 @@ mod tests {
 
         assert!(light.len() > 10, "{light:?}");
 
-        for selector in [BY_DEFAULT, DARK_CHOSEN, CATPPUCCIN_CHOSEN, GRUVBOX_CHOSEN] {
+        for selector in [
+            BY_DEFAULT,
+            DARK_CHOSEN,
+            CATPPUCCIN_CHOSEN,
+            GRUVBOX_CHOSEN,
+            BLACKSITE_CHOSEN,
+        ] {
             assert_eq!(tokens(css, selector), light, "{selector} is missing tokens");
         }
     }
