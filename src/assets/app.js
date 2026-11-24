@@ -49,8 +49,9 @@
   // stylesheet picks one -- which is also what keeps a printout from being a
   // dark diagram on white paper.
   //
-  // Twice, not once per palette: Catppuccin, Gruvbox and Blacksite are dark
-  // pages, and the dark drawing reads correctly on all three. A drawing of their own would be a
+  // Twice, not once per palette: Catppuccin, Gruvbox, Blacksite and Sereno
+  // Dark are dark pages, and the dark drawing reads correctly on all four, as
+  // the light one does on Sereno Light. A drawing of their own would be a
   // third and a fourth render of every fence on the page, for a difference
   // nobody would name without the two side by side.
   var DIAGRAM_PALETTES = [
@@ -87,7 +88,7 @@
   // open, for nothing. Every other name is a :root[data-theme=...] block there
   // and a scope render.rs gives syntax colours to; the order is this one because
   // the menu is written out in it too.
-  var THEMES = ["system", "light", "dark", "catppuccin-mocha", "gruvbox-dark", "blacksite"];
+  var THEMES = ["system", "light", "dark", "catppuccin-mocha", "gruvbox-dark", "blacksite", "sereno-light", "sereno-dark"];
 
   function send(message) {
     window.ipc.postMessage(JSON.stringify(message));

@@ -103,7 +103,7 @@ Each of these is load-bearing. The comment above it says the same thing at more 
 | Relative URLs become absolute at render time, raw HTML included | `src/render.rs:71`, `:245` | the webview flattens `../` and the image is never found |
 | Attach the webview through the GTK vbox, not a raw handle | `src/main.rs:495` | wry refuses a native Wayland session outright |
 | Keep `Access` and `Modify(Metadata)` out of the watcher | `src/watcher.rs:57` | rendering opens the file, which is reported as a change, forever |
-| Scope every palette; `@media print` comes last | `src/render.rs:121` | one stray token in one language; a printout in pale colours |
+| Scope every palette; every syntax palette but the light one is `@media screen` only; `@media print` comes last | `src/render.rs:143` | one stray token in one language; a printout in pale colours, since an override for print cannot reach scopes the light theme never names |
 | Fill in only the standard handles Windows left empty | `src/main.rs:308` | `mark --version > out.txt` prints to the console and leaves the file empty |
 | `#split` keeps `min-height: 0` under the bar | `src/assets/style.css:279` | a flex item will not shrink below its content, so the window scrolls instead of the document |
 | Build the window hidden; `App::reveal` shows it once `ready` has brought the kept size | `src/main.rs`, `run` and `App::reveal` | the window opens at the default size and jumps, already placed by the compositor for the wrong one |
@@ -124,7 +124,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 67 tests: 31 in render.rs, 11 in protocol.rs, 21 in main.rs,
+cargo test          # 71 tests: 35 in render.rs, 11 in protocol.rs, 21 in main.rs,
                     # 3 in base64.rs, 1 in clipboard.rs
 cargo clippy
 cargo run -- examples/README.md
@@ -244,7 +244,7 @@ see Ground rules.
 | A new comrak extension | `Renderer::new` in `src/render.rs`, styling in `src/assets/style.css`, plus a test |
 | A newer KaTeX | `src/assets/katex/README.md` has the commands, the three properties the bundle has to keep, and the fonts to re-fetch |
 | Colours or typography | `src/assets/style.css`, every palette that declares the token -- `every_palette_declares_the_same_tokens` fails otherwise -- and both copies of the dark one |
-| A new theme | a `:root[data-theme="..."]` block in `src/assets/style.css` with every token the light `:root` has -> the diagram and `@media print` selector lists further down the same file -> a constant and an arm in `syntax_css` in `src/render.rs` -> an entry in `#theme-menu` in `src/assets/shell.html` and in `THEMES` in `src/assets/app.js`, in the same order -> the same palette and the same menu entry in `docs/style.css` and `docs/index.html`, plus the list in the page's pre-paint script. Three tests hold the ends together: `the_theme_menu_offers_every_palette_the_stylesheet_declares`, `the_landing_page_offers_the_same_themes` and `every_palette_declares_the_same_tokens` |
+| A new theme | a `:root[data-theme="..."]` block in `src/assets/style.css` with every token the light `:root` has -> the `@media print` palette list further down the same file, and, for a dark palette only, the diagram swap rules and both print diagram lists -> a constant and an arm in `syntax_css` in `src/render.rs` (inside the `@media screen` block), with the constant in `DARK_CHOSEN_ALL` or in `OTHER_LIGHT_CHOSEN` -- which one decides the diagram a page shows, so a light palette in the dark list is dark diagrams on a light page, and no test can tell which a palette is -> an entry in `#theme-menu` in `src/assets/shell.html` and in `THEMES` in `src/assets/app.js`, in the same order -> the same palette and the same menu entry in `docs/style.css` and `docs/index.html`, plus the list in the page's pre-paint script. Tests hold the ends together: `the_theme_menu_offers_every_palette_the_stylesheet_declares`, `the_landing_page_offers_the_same_themes`, `every_palette_declares_the_same_tokens`, `every_declared_palette_is_either_dark_or_light`, `every_dark_palette_prints_the_light_diagram` and `nothing_but_the_light_theme_reaches_paper` |
 | A different syntax theme | the `*_THEME` constants in `src/render.rs`, one per palette |
 | A new embedded asset | the `ASSETS` table in `src/protocol.rs` (`include_bytes!`), or `PACKED` beside it if it is big enough to be worth storing in gzip |
 | A newer mermaid | `src/assets/mermaid/README.md` has the commands and the two properties the bundle has to keep (no `eval`, no fetching) for the CSP to stand |

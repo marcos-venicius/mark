@@ -32,6 +32,20 @@ Helix theme of the same name. bat ships no syntax theme for it, so the code
 colours are built from that same palette, mapping each Helix scope onto the
 TextMate one that carries it.
 
+Two more, Sereno Light and Sereno Dark: a pair of Helix themes for a lit room
+and a dim one, warm off-white and soft charcoal, whose syntax colours share one
+perceived lightness. Their code colours are built the same way as Blacksite's.
+Sereno Light is the first light palette besides the default one; it shows the
+light drawing of a diagram, and like every theme it prints as the default light
+palette.
+
+Printing from a dark theme no longer lets its code colours onto the paper. The
+page itself was always printed in the light palette, but a code block kept some
+of the screen theme's colours -- the braces, commas and operators of a Rust
+block came out in the pale grey meant for a dark page, nearly invisible on
+white. That was true of every theme but the light one, the default dark
+included. Code now prints in the light theme's colours and nothing else.
+
 ## 1.1.0 — 2026-09-15
 
 Diagrams can be taken out of the document: opened over the window, moved

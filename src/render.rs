@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use comrak::plugins::syntect::{SyntectAdapter, SyntectAdapterBuilder};
 use comrak::{markdown_to_html_with_plugins, Options};
-use syntect::highlighting::Theme;
+use syntect::highlighting::{FontStyle, Theme};
 use syntect::html::ClassStyle;
 use two_face::theme::EmbeddedThemeName;
 
@@ -45,15 +45,30 @@ const DARK_CHOSEN: &str = ":root[data-theme=\"dark\"]";
 const CATPPUCCIN_CHOSEN: &str = ":root[data-theme=\"catppuccin-mocha\"]";
 const GRUVBOX_CHOSEN: &str = ":root[data-theme=\"gruvbox-dark\"]";
 const BLACKSITE_CHOSEN: &str = ":root[data-theme=\"blacksite\"]";
+const SERENO_LIGHT_CHOSEN: &str = ":root[data-theme=\"sereno-light\"]";
+const SERENO_DARK_CHOSEN: &str = ":root[data-theme=\"sereno-dark\"]";
 
-/// The palettes a printer has to be talked out of, which is every one that is
-/// not already the light one.
+/// The dark palettes: the ones that take the dark drawing of a diagram, and
+/// that a printer has to be talked out of.
 const DARK_CHOSEN_ALL: &[&str] = &[
     DARK_CHOSEN,
     CATPPUCCIN_CHOSEN,
     GRUVBOX_CHOSEN,
     BLACKSITE_CHOSEN,
+    SERENO_DARK_CHOSEN,
 ];
+
+/// The light palettes other than the light one. They take the light drawing of
+/// a diagram as they are, but still print as the light palette: print is one
+/// deliberate set of colours, darker than any screen palette, and a printout
+/// should not depend on what was on screen when Ctrl P was pressed.
+const OTHER_LIGHT_CHOSEN: &[&str] = &[SERENO_LIGHT_CHOSEN];
+
+/// Every selector print has to override with the light theme: every way of
+/// arriving at a palette but picking light by name, which is already it.
+fn printed_selectors() -> Vec<&'static str> {
+    [&[BY_DEFAULT], DARK_CHOSEN_ALL, OTHER_LIGHT_CHOSEN].concat()
+}
 
 pub struct Renderer {
     options: Options<'static>,
@@ -139,18 +154,27 @@ impl Renderer {
     ///
     /// Printing is the last way, and it only ever wants the light one: a printer
     /// drops the near-black background a dark theme was picked against, and its
-    /// tokens are then pale colours on white paper. So the light theme is
-    /// emitted once more under `@media print`, against every selector that would
-    /// otherwise have delivered a dark palette. Same specificity as those, later
-    /// in the file, so it wins on order -- which is what the `@media print` block
-    /// in style.css does for the rest of the page.
+    /// tokens are then pale colours on white paper. So every palette but the
+    /// light one is `@media screen` only, and the light theme is emitted once
+    /// more under `@media print`, against every selector that would otherwise
+    /// have delivered another palette.
     ///
-    /// Blacksite is the exception to "a theme bat ships": it is a Helix theme
-    /// with no TextMate counterpart, so `blacksite_theme` builds one from the
-    /// same palette. It colours fewer scopes than a bat theme does, which makes
-    /// its copy the smallest of the lot.
+    /// Keeping the others off paper is the part that matters, and overriding
+    /// them is not enough. style.css overrides its palettes for print, and can,
+    /// because every palette sets the same tokens. Syntax themes do not colour
+    /// the same scopes: Catppuccin has rules for hundreds the light theme never
+    /// names, and the Helix themes colour `punctuation`, which it leaves alone.
+    /// Those rules have nothing to lose to, and others win on specificity --
+    /// `.hl-keyword.hl-operator` over `.hl-keyword` -- so an override printed a
+    /// Rust block's braces in the pale grey meant for a dark page.
     ///
-    /// Eight copies of a syntax theme come to about 180 KB, which is the largest
+    /// Blacksite and the two Sereno palettes are the exception to "a theme bat
+    /// ships": they are Helix themes with no TextMate counterpart, so
+    /// `blacksite_theme` and `sereno_theme` build one each from the same
+    /// palette. They colour fewer scopes than a bat theme does, which makes
+    /// their copies the smallest of the lot.
+    ///
+    /// Ten copies of a syntax theme come to about 190 KB, which is the largest
     /// thing in the shell by some way. It is built once, at startup, and costs
     /// the binary nothing: two-face carries every theme either way. Another
     /// palette from bat would add roughly 25 KB more.
@@ -161,16 +185,18 @@ impl Renderer {
         let catppuccin = theme_css(&themes, CATPPUCCIN_THEME);
         let gruvbox = theme_css(&themes, GRUVBOX_THEME);
         let blacksite = css_for(&blacksite_theme());
+        let sereno_light = css_for(&sereno_theme(&SERENO_LIGHT));
+        let sereno_dark = css_for(&sereno_theme(&SERENO_DARK));
 
         // One copy of the light theme covers all of print, rather than one per
         // selector, because `scope` takes the whole list at once.
-        let mut printed = vec![BY_DEFAULT];
-        printed.extend_from_slice(DARK_CHOSEN_ALL);
+        let printed = printed_selectors();
 
         format!(
             "@media (prefers-color-scheme: light) {{\n{}}}\n\
-             @media (prefers-color-scheme: dark) {{\n{}}}\n\
-             {}\n{}\n{}\n{}\n{}\n\
+             @media screen and (prefers-color-scheme: dark) {{\n{}}}\n\
+             {}\n\
+             @media screen {{\n{}\n{}\n{}\n{}\n{}\n{}}}\n\
              @media print {{\n{}}}",
             scope(&light, &[BY_DEFAULT]),
             scope(&dark, &[BY_DEFAULT]),
@@ -179,6 +205,8 @@ impl Renderer {
             scope(&catppuccin, &[CATPPUCCIN_CHOSEN]),
             scope(&gruvbox, &[GRUVBOX_CHOSEN]),
             scope(&blacksite, &[BLACKSITE_CHOSEN]),
+            scope(&sereno_light, &[SERENO_LIGHT_CHOSEN]),
+            scope(&sereno_dark, &[SERENO_DARK_CHOSEN]),
             scope(&light, &printed),
         )
     }
@@ -215,16 +243,6 @@ fn css_for(theme: &Theme) -> String {
 /// The colours are the `[palette]` of `blacksite.toml` and are repeated in the
 /// `blacksite` block of style.css; change one, change the other.
 fn blacksite_theme() -> Theme {
-    use std::str::FromStr;
-    use syntect::highlighting::{
-        Color, FontStyle, ScopeSelectors, StyleModifier, ThemeItem, ThemeSettings,
-    };
-
-    fn hex(rgb: u32) -> Color {
-        let [_, r, g, b] = rgb.to_be_bytes();
-        Color { r, g, b, a: 0xff }
-    }
-
     const FG: u32 = 0xb4c4b9;
     const DIM: u32 = 0x4f6257;
     const OP: u32 = 0x8aa293;
@@ -273,11 +291,129 @@ fn blacksite_theme() -> Theme {
         ("markup.changed", AMBER, none),
     ];
 
+    helix_theme("Blacksite", FG, rules)
+}
+
+/// The colours of one Sereno palette, under the names its `[palette]` gives
+/// them. Light and dark share every scope and differ only here, which is the
+/// whole of the design: the syntax colours in each share one perceived
+/// lightness, so no token shouts over the others.
+struct SerenoPalette {
+    name: &'static str,
+    fg: u32,
+    punct: u32,
+    comment: u32,
+    keyword: u32,
+    function: u32,
+    kind: u32,
+    string: u32,
+    constant: u32,
+    red: u32,
+    amber: u32,
+    blue: u32,
+}
+
+/// The `[palette]` of `sereno_light.toml`, repeated in the `sereno-light`
+/// block of style.css; change one, change the other.
+const SERENO_LIGHT: SerenoPalette = SerenoPalette {
+    name: "Sereno Light",
+    fg: 0x25292f,
+    punct: 0x44484e,
+    comment: 0x5d4d37,
+    keyword: 0x652a72,
+    function: 0x184687,
+    kind: 0x025559,
+    string: 0x265721,
+    constant: 0x743610,
+    red: 0xb02a2d,
+    amber: 0x986600,
+    blue: 0x215da5,
+};
+
+/// The `[palette]` of `sereno_dark.toml`, repeated in the `sereno-dark` block
+/// of style.css; change one, change the other.
+const SERENO_DARK: SerenoPalette = SerenoPalette {
+    name: "Sereno Dark",
+    fg: 0xdad7cf,
+    punct: 0xbab7af,
+    comment: 0xbdaf99,
+    keyword: 0xe2b5ec,
+    function: 0x9fcbfe,
+    kind: 0x93d9d9,
+    string: 0xacd9a2,
+    constant: 0xf5bd94,
+    red: 0xed756e,
+    amber: 0xe6b55d,
+    blue: 0x73b0ee,
+};
+
+/// Sereno, the reader's pair of Helix themes for a lit room and a dim one, as
+/// a syntect theme. The mapping is the one `blacksite_theme` explains, read
+/// off the Sereno files instead: they send more to `keyword` (macros,
+/// attributes, tags, escapes) and colour members as plain text.
+///
+/// One departure. Helix colours a diff's lines with `plus`, `minus` and
+/// `delta`, which the theme picked to be blended over the background, not
+/// read: `plus` in the light palette is under 3.5:1 on its own page. A
+/// ```diff fence is text, so it takes the reading colours that say the same
+/// thing -- `string` for added, `red` for removed, `amber` for changed.
+fn sereno_theme(p: &SerenoPalette) -> Theme {
+    let none = FontStyle::empty();
+    let rules: &[(&str, u32, FontStyle)] = &[
+        ("comment, punctuation.definition.comment", p.comment, none),
+        ("keyword, storage", p.keyword, none),
+        ("keyword.operator, punctuation", p.punct, none),
+        ("string, punctuation.definition.string", p.string, none),
+        ("string.regexp", p.constant, none),
+        ("constant, variable.language", p.constant, none),
+        ("constant.character.escape", p.keyword, none),
+        ("entity.name.function, support.function, meta.function-call.identifier", p.function, none),
+        ("entity.name.function.macro, support.macro, meta.preprocessor", p.keyword, none),
+        (
+            "entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, \
+             entity.name.trait, entity.name.namespace, entity.name.module, \
+             support.type, support.class, entity.other.inherited-class",
+            p.kind,
+            none,
+        ),
+        ("variable, variable.parameter", p.fg, none),
+        ("variable.other.member, variable.other.property, meta.property-name, support.type.property-name", p.fg, none),
+        ("entity.other.attribute-name, meta.attribute, meta.annotation, entity.name.label", p.keyword, none),
+        ("entity.name.tag", p.keyword, none),
+        ("markup.heading, markup.heading entity.name", p.function, FontStyle::BOLD),
+        ("markup.bold", p.fg, FontStyle::BOLD),
+        ("markup.italic", p.fg, FontStyle::ITALIC),
+        ("string.other.link", p.function, none),
+        ("markup.underline.link", p.blue, FontStyle::UNDERLINE),
+        ("markup.raw", p.string, none),
+        ("markup.list punctuation.definition", p.keyword, none),
+        ("markup.quote", p.comment, none),
+        ("markup.inserted", p.string, none),
+        ("markup.deleted, invalid", p.red, none),
+        ("markup.changed", p.amber, none),
+    ];
+
+    helix_theme(p.name, p.fg, rules)
+}
+
+/// A syntect theme from a foreground and a list of (scope selector, colour,
+/// style) rules, which is all a theme ported from Helix needs. Later rules win
+/// over earlier ones on a tie, so the specific scopes come after the general
+/// ones they refine.
+fn helix_theme(name: &str, fg: u32, rules: &[(&str, u32, FontStyle)]) -> Theme {
+    use std::str::FromStr;
+    use syntect::highlighting::{Color, ScopeSelectors, StyleModifier, ThemeItem, ThemeSettings};
+
+    fn hex(rgb: u32) -> Color {
+        let [_, r, g, b] = rgb.to_be_bytes();
+        Color { r, g, b, a: 0xff }
+    }
+
     Theme {
-        name: Some("Blacksite".to_owned()),
+        name: Some(name.to_owned()),
         author: None,
         settings: ThemeSettings {
-            foreground: Some(hex(FG)),
+            foreground: Some(hex(fg)),
             ..ThemeSettings::default()
         },
         scopes: rules
@@ -685,12 +821,14 @@ mod tests {
         let css = Renderer::syntax_css();
         for scope in [
             "@media (prefers-color-scheme: light)",
-            "@media (prefers-color-scheme: dark)",
+            "@media screen and (prefers-color-scheme: dark)",
             LIGHT_CHOSEN,
             DARK_CHOSEN,
             CATPPUCCIN_CHOSEN,
             GRUVBOX_CHOSEN,
             BLACKSITE_CHOSEN,
+            SERENO_LIGHT_CHOSEN,
+            SERENO_DARK_CHOSEN,
         ] {
             assert!(css.contains(scope), "missing {scope}");
         }
@@ -706,6 +844,8 @@ mod tests {
             .map(|name| theme_css(&themes, name))
             .to_vec();
         all.push(css_for(&blacksite_theme()));
+        all.push(css_for(&sereno_theme(&SERENO_LIGHT)));
+        all.push(css_for(&sereno_theme(&SERENO_DARK)));
 
         for (index, one) in all.iter().enumerate() {
             for other in &all[index + 1..] {
@@ -714,31 +854,102 @@ mod tests {
         }
     }
 
-    /// Print has to end up with the light theme however the reader got there,
-    /// and it only does so by coming last: the selectors it overrides have the
-    /// same specificity, so order is the whole mechanism.
+    /// Print has to end up with the light theme however the reader got there:
+    /// every selector that delivers another palette on screen is given the
+    /// light theme under `@media print`.
     #[test]
-    fn print_overrides_the_dark_palette_and_comes_last() {
+    fn print_gives_every_palette_the_light_theme() {
         let css = Renderer::syntax_css();
-        let print = css.find("@media print").expect("no print block");
+        let print = &css[css.find("@media print").expect("no print block")..];
 
-        // The rules it has to beat are the ones written before it.
-        for scope in DARK_CHOSEN_ALL {
-            assert!(css.find(scope).expect("no {scope} rules") < print);
-        }
-        for scope in [&[BY_DEFAULT], DARK_CHOSEN_ALL].concat() {
-            assert!(css[print..].contains(scope), "print misses {scope}");
-        }
-
-        // The colours under it have to be the light theme's. Anything one of the
-        // dark themes alone emits would mean the wrong palette was scoped.
-        let mut printed = vec![BY_DEFAULT];
-        printed.extend_from_slice(DARK_CHOSEN_ALL);
+        let printed = printed_selectors();
         let light = scope(&theme_css(&two_face::theme::extra(), LIGHT_THEME), &printed);
         assert!(
-            css[print..].contains(light.trim_end()),
+            print.contains(light.trim_end()),
             "print is not the light theme"
         );
+    }
+
+    /// Giving print the light theme is not enough on its own: any rule of
+    /// another palette that still applies on paper either colours a scope the
+    /// light theme never names, or outranks it on specificity. Catppuccin's
+    /// hundreds of extra scopes and the Helix themes' `punctuation` did both,
+    /// and printed a Rust block's braces in a grey meant for a dark page. So
+    /// with the screen-only blocks taken out, every rule left has to be one of
+    /// the light theme's.
+    #[test]
+    fn nothing_but_the_light_theme_reaches_paper() {
+        let css = Renderer::syntax_css();
+        let light = theme_css(&two_face::theme::extra(), LIGHT_THEME);
+
+        let printed = printed_selectors();
+        let allowed: std::collections::BTreeSet<String> = [
+            scope(&light, &[BY_DEFAULT]),
+            scope(&light, &[LIGHT_CHOSEN]),
+            scope(&light, &printed),
+        ]
+        .iter()
+        .flat_map(|css| rules(css))
+        .collect();
+
+        let paper = rules(&without_screen_only(&css));
+        assert!(paper.len() > 10, "{paper:?}");
+
+        let foreign: Vec<&String> = paper
+            .iter()
+            .filter(|rule| !allowed.contains(*rule))
+            .collect();
+        assert!(foreign.is_empty(), "these reach paper: {foreign:?}");
+    }
+
+    /// A stylesheet with every `@media screen ...` block cut out, which is what
+    /// a printer is left with.
+    fn without_screen_only(css: &str) -> String {
+        let mut out = String::new();
+        let mut rest = css;
+
+        while let Some(at) = rest.find("@media screen") {
+            out.push_str(&rest[..at]);
+            let open = at + rest[at..].find('{').expect("the block opens");
+
+            let mut depth = 0;
+            let mut close = open;
+            for (offset, c) in rest[open..].char_indices() {
+                match c {
+                    '{' => depth += 1,
+                    '}' => depth -= 1,
+                    _ => continue,
+                }
+                if depth == 0 {
+                    close = open + offset;
+                    break;
+                }
+            }
+            rest = &rest[close + 1..];
+        }
+        out.push_str(rest);
+        out
+    }
+
+    /// The rules of a stylesheet, each as one line with its whitespace
+    /// collapsed, the `@media` lines that open a block left out.
+    fn rules(css: &str) -> std::collections::BTreeSet<String> {
+        let body: String = css
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("@media"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        body.split_inclusive('}')
+            .filter_map(|rule| rule.split_once('{'))
+            .filter(|(selectors, _)| !selectors.trim().is_empty())
+            .map(|(selectors, declarations)| {
+                format!("{}{{{}", selectors.trim(), declarations)
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect()
     }
 
     /// An unscoped rule would show through in the other palette wherever that
@@ -786,8 +997,53 @@ mod tests {
             CATPPUCCIN_CHOSEN,
             GRUVBOX_CHOSEN,
             BLACKSITE_CHOSEN,
+            SERENO_LIGHT_CHOSEN,
+            SERENO_DARK_CHOSEN,
         ] {
             assert_eq!(tokens(css, selector), light, "{selector} is missing tokens");
+        }
+    }
+
+    /// Whether a palette is dark or light decides which drawing of a diagram it
+    /// shows, and every one of them has to be overridden for print. Both are
+    /// read from the two lists here, so a palette the stylesheet declares and
+    /// neither list names would print in its own colours -- and a dark one
+    /// would also show the light diagram -- with every other test passing.
+    #[test]
+    fn every_declared_palette_is_either_dark_or_light() {
+        let mut classified: Vec<String> = [DARK_CHOSEN_ALL, OTHER_LIGHT_CHOSEN]
+            .concat()
+            .iter()
+            .map(|selector| {
+                selector
+                    .split('"')
+                    .nth(1)
+                    .expect("a quoted name")
+                    .to_owned()
+            })
+            .collect();
+        classified.sort();
+
+        assert_eq!(
+            classified,
+            declared_themes(include_str!("assets/style.css"))
+        );
+    }
+
+    /// The stylesheet's own print block is the other half of the same rule:
+    /// it resets the page's colours under every selector `printed_selectors`
+    /// resets the syntax colours under.
+    #[test]
+    fn the_stylesheet_prints_every_palette_as_the_light_one() {
+        let css = include_str!("assets/style.css");
+        let tag = "@media print {";
+        let print = &css[css.find(tag).expect("no print block") + tag.len()..];
+        // The palette rule opens the block, so its selector list is everything
+        // up to the next brace.
+        let selectors = &print[..print.find('{').expect("a palette rule")];
+
+        for selector in printed_selectors() {
+            assert!(selectors.contains(selector), "print misses {selector}");
         }
     }
 
@@ -804,6 +1060,30 @@ mod tests {
                 format!("{selector} .diagram-dark {{ display: block; }}"),
             ] {
                 assert!(css.contains(&rule), "the stylesheet is missing {rule}");
+            }
+        }
+    }
+
+    /// Print swaps every dark diagram back for the light drawing, in two lists
+    /// written out by hand at the foot of the stylesheet. A dark palette missing
+    /// from them prints its diagrams dark, on white paper, with the on-screen
+    /// rules above all present and correct.
+    #[test]
+    fn every_dark_palette_prints_the_light_diagram() {
+        let css = include_str!("assets/style.css");
+        let print = &css[css.find("@media print {").expect("no print block")..];
+
+        for selector in DARK_CHOSEN_ALL {
+            for (class, display) in [("diagram-light", "block"), ("diagram-dark", "none")] {
+                let rule = format!("{selector} .{class}");
+                let at = print
+                    .find(&rule)
+                    .unwrap_or_else(|| panic!("print misses {rule}"));
+                let end = at + print[at..].find('}').expect("the rule closes");
+                assert!(
+                    print[at..end].contains(&format!("display: {display};")),
+                    "{rule} does not print as {display}"
+                );
             }
         }
     }

@@ -34,7 +34,7 @@
 <script>
   try {
     var t = localStorage.getItem("mark.site.theme");
-    if (["light", "dark", "catppuccin-mocha", "gruvbox-dark", "blacksite"].indexOf(t) >= 0)
+    if (["light", "dark", "catppuccin-mocha", "gruvbox-dark", "blacksite", "sereno-light", "sereno-dark"].indexOf(t) >= 0)
       document.documentElement.dataset.theme = t;
   } catch (e) { /* storage disabled: the system palette is a fine answer */ }
 </script>
@@ -56,7 +56,7 @@
       <a href="https://github.com/marcos-venicius/mark">GitHub</a>
     </nav>
 
-    <!-- The same six the window offers, in the same order and under the same
+    <!-- The same eight the window offers, in the same order and under the same
          names, because they are the same palettes. -->
     <div class="theme-picker">
       <button id="theme" class="icon-button" type="button" title="Theme" aria-label="Theme" aria-haspopup="true" aria-expanded="false">
@@ -70,6 +70,8 @@
         <button type="button" role="menuitemradio" value="catppuccin-mocha" aria-checked="false">Catppuccin Mocha</button>
         <button type="button" role="menuitemradio" value="gruvbox-dark" aria-checked="false">Gruvbox Dark</button>
         <button type="button" role="menuitemradio" value="blacksite" aria-checked="false">Blacksite</button>
+        <button type="button" role="menuitemradio" value="sereno-light" aria-checked="false">Sereno Light</button>
+        <button type="button" role="menuitemradio" value="sereno-dark" aria-checked="false">Sereno Dark</button>
       </div>
     </div>
   </div>
@@ -385,9 +387,9 @@
 
       <article class="card">
         <span class="card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" style="fill:currentColor;stroke:none"/></svg></span>
-        <h3>Six themes</h3>
+        <h3>Eight themes</h3>
         <p>
-          Light, dark, Catppuccin Mocha, Gruvbox Dark and Blacksite, or the system, which it
+          Light, dark, Catppuccin Mocha, Gruvbox Dark, Blacksite and Sereno light and dark, or the system, which it
           follows and switches with while the window is open. <kbd>D</kbd> walks
           them and the choice is remembered between runs. The syntax colours
           change with the page.

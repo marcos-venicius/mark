@@ -235,6 +235,77 @@
   color-scheme: dark;
 }
 
+/* Sereno, the reader's pair of Helix themes for a lit room and a dim one, with
+   the names from their [palette] beside each value. The two are mapped the same
+   way, token for token, so switching between them changes the light and not
+   the layout. The bar takes `line`, the half step from the page towards
+   `panel`, the surface of a code block: in the light one that is a step
+   darker, as the light palette's bar is, and in the dark one a step lighter,
+   because Helix has nothing darker than its background to offer.
+
+   `surface-strong` is the one value no Helix name carries: it is halfway from
+   `panel` to `edge`. `edge` itself is the border, and using it for both left
+   a code block's language label and copy button with a border the colour of
+   their own fill, and the dark label's text at 3.6:1; halfway brings that to
+   4.0:1, the floor the other palettes keep, and 4.5:1 in the light one.
+
+   Selection is Helix's own solid `sel` rather than a tint of the link: it was
+   chosen to keep every syntax colour legible on top of it. The syntax colours are built from the
+   same palettes by sereno_theme in render.rs, since bat ships no such theme.
+
+   Light is a palette with a name, not the floor :root above, so it has a block
+   of its own like any other -- and a printout of it is the light palette,
+   which the @media print block at the foot of this file sees to. */
+:root[data-theme="sereno-light"] {
+  --bg: #f6f4f0;              /* bg */
+  --sidebar-bg: #efeee8;      /* line */
+  --surface: #ebe9e4;         /* panel */
+  --surface-strong: #e0ded8;  /* panel to edge, halfway */
+  --border: #d6d4cd;          /* edge */
+  --border-strong: #cccbc3;   /* ws */
+  --text: #25292f;            /* fg */
+  --text-soft: #44484e;       /* punct */
+  --muted: #66635a;           /* dim */
+  --link: #184687;            /* function */
+  --accent: #184687;          /* function */
+  --shadow: 0 6px 24px rgba(37, 41, 47, 0.12);
+  --selection: #ccdff3;       /* sel */
+  --backdrop: rgba(37, 41, 47, 0.34);
+
+  --note: #215da5;            /* blue */
+  --tip: #265721;             /* string */
+  --important: #652a72;       /* keyword */
+  --warning: #986600;         /* amber */
+  --caution: #b02a2d;         /* red */
+
+  color-scheme: light;
+}
+
+:root[data-theme="sereno-dark"] {
+  --bg: #171a1d;              /* bg */
+  --sidebar-bg: #1c2024;      /* line */
+  --surface: #1d2125;         /* panel */
+  --surface-strong: #24292e;  /* panel to edge, halfway */
+  --border: #2c3136;          /* edge */
+  --border-strong: #31363c;   /* ws */
+  --text: #dad7cf;            /* fg */
+  --text-soft: #bab7af;       /* punct */
+  --muted: #81878d;           /* dim */
+  --link: #9fcbfe;            /* function */
+  --accent: #9fcbfe;          /* function */
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  --selection: #27364a;       /* sel */
+  --backdrop: rgba(23, 26, 29, 0.62);
+
+  --note: #73b0ee;            /* blue */
+  --tip: #acd9a2;             /* string */
+  --important: #e2b5ec;       /* keyword */
+  --warning: #e6b55d;         /* amber */
+  --caution: #ed756e;         /* red */
+
+  color-scheme: dark;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -803,10 +874,11 @@ pre[data-lang]::before {
    mermaid writes its colours into the SVG: which one a reader sees is settled
    here rather than at render time, and switching theme costs nothing.
 
-   Twice, not once per palette: Catppuccin, Gruvbox and Blacksite are dark
-   pages and the dark drawing reads correctly on all three. A drawing of their own would be a third
-   and a fourth render of every fence for a diagram nobody would call wrong
-   without the two side by side.
+   Twice, not once per palette: Catppuccin, Gruvbox, Blacksite and Sereno Dark
+   are dark pages and the dark drawing reads correctly on all four, as the light
+   one does on Sereno Light. A drawing of their own would be a third and a
+   fourth render of every fence for a diagram nobody would call wrong without
+   the two side by side.
 
    The selectors are the ones render.rs scopes the syntax colours to. One list
    changed without the other is a white diagram on a dark page. The @media print
@@ -859,6 +931,8 @@ pre[data-lang]::before {
 :root[data-theme="gruvbox-dark"] .diagram-dark { display: block; }
 :root[data-theme="blacksite"] .diagram-light { display: none; }
 :root[data-theme="blacksite"] .diagram-dark { display: block; }
+:root[data-theme="sereno-dark"] .diagram-light { display: none; }
+:root[data-theme="sereno-dark"] .diagram-dark { display: block; }
 
 /* Said above the fence mermaid refused, which app.js leaves where it was: the
    text someone wrote is more use than a gap where a diagram should be. */
@@ -1203,16 +1277,25 @@ tbody tr:nth-child(even) { background: var(--surface); }
    printers drop backgrounds by default: left alone it arrives as the pale grey
    text meant for a near-black page, on white. The variables are set again with
    the same selectors that set them in the first place, placed later in the file
-   so the tie in specificity is broken by order. render.rs does the same for the
-   syntax colours. Every palette but the light one is listed here, so a palette
-   added above and forgotten here is a printout in its own colours. */
+   so the tie in specificity is broken by order. That works here because every
+   palette sets the same tokens, so there is nothing an override can miss. The
+   syntax colours cannot be handled the same way, since syntax themes do not
+   colour the same scopes: render.rs keeps every palette but the light one off
+   paper altogether instead.
+
+   Every palette but the light one is listed here, Sereno Light included -- it
+   would print legibly as it is, but print is one set of colours whatever was
+   on screen -- so a palette added above and forgotten here is a printout in
+   its own colours. */
 @media print {
   :root,
   :root:not([data-theme]),
   :root[data-theme="dark"],
   :root[data-theme="catppuccin-mocha"],
   :root[data-theme="gruvbox-dark"],
-  :root[data-theme="blacksite"] {
+  :root[data-theme="blacksite"],
+  :root[data-theme="sereno-light"],
+  :root[data-theme="sereno-dark"] {
     --bg: #ffffff;
     --sidebar-bg: #ffffff;
     --surface: #f6f7f9;
@@ -1302,14 +1385,16 @@ tbody tr:nth-child(even) { background: var(--surface); }
   :root[data-theme="dark"] .diagram-light,
   :root[data-theme="catppuccin-mocha"] .diagram-light,
   :root[data-theme="gruvbox-dark"] .diagram-light,
-  :root[data-theme="blacksite"] .diagram-light { display: block; }
+  :root[data-theme="blacksite"] .diagram-light,
+  :root[data-theme="sereno-dark"] .diagram-light { display: block; }
 
   :root .diagram-dark,
   :root:not([data-theme]) .diagram-dark,
   :root[data-theme="dark"] .diagram-dark,
   :root[data-theme="catppuccin-mocha"] .diagram-dark,
   :root[data-theme="gruvbox-dark"] .diagram-dark,
-  :root[data-theme="blacksite"] .diagram-dark { display: none; }
+  :root[data-theme="blacksite"] .diagram-dark,
+  :root[data-theme="sereno-dark"] .diagram-dark { display: none; }
 
   p { orphans: 2; widows: 2; }
 

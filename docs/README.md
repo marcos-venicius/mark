@@ -10,7 +10,7 @@ That is the only step, and it is the repository owner's to take.
 Notes for whoever changes it next:
 
 - The palettes are the app's own, copied token for token from
-  `src/assets/style.css` -- light, dark, Catppuccin Mocha, Gruvbox Dark and Blacksite, with
+  `src/assets/style.css` -- light, dark, Catppuccin Mocha, Gruvbox Dark, Blacksite and both Sereno, with
   the dark one written out twice for the same reason it is there. Each carries a
   `--syn-*` set as well, which the app has no use for: there is no syntect here,
   so the code in the mock is highlighted by hand, once per palette. A colour
@@ -34,6 +34,6 @@ Notes for whoever changes it next:
   in `src/main.rs`, and the list of
   palettes in the corner, which `the_landing_page_offers_the_same_themes` in
   `src/render.rs` reads straight out of `index.html` and compares against the
-  window's own menu. The five names in the pre-paint script in the `<head>` are a
+  window's own menu. The palette names in the pre-paint script in the `<head>` are a
   fourth copy, and the only one nothing checks -- it runs before `app.js`
   arrives, so it cannot read the list from there.

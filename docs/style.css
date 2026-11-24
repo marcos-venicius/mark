@@ -279,6 +279,84 @@
   color-scheme: dark;
 }
 
+/* Sereno light and dark, the app's own once more. The light one is a named
+   palette like the rest rather than the :root above, so it carries every token
+   that block declares. The --syn-* set is the Sereno palette's own keyword,
+   string, comment, function, constant and type. */
+:root[data-theme="sereno-light"] {
+  --bg: #f6f4f0;
+  --sidebar-bg: #efeee8;
+  --surface: #ebe9e4;
+  --surface-strong: #d6d4cd;
+  --border: #d6d4cd;
+  --border-strong: #cccbc3;
+  --text: #25292f;
+  --text-soft: #44484e;
+  --muted: #66635a;
+  --link: #184687;
+  --accent: #184687;
+  --shadow: 0 6px 24px rgba(37, 41, 47, 0.12);
+  --selection: #ccdff3;
+  --backdrop: rgba(37, 41, 47, 0.34);
+
+  --note: #215da5;
+  --tip: #265721;
+  --important: #652a72;
+  --warning: #986600;
+  --caution: #b02a2d;
+
+  --site-nav-bg: rgba(246, 244, 240, 0.82);
+  --site-glow: rgba(24, 70, 135, 0.13);
+  --site-frame: 0 24px 70px -28px rgba(37, 41, 47, 0.42);
+  --site-on-accent: #f6f4f0;
+
+  --syn-key: #652a72;
+  --syn-str: #265721;
+  --syn-com: #5d4d37;
+  --syn-fn: #184687;
+  --syn-num: #743610;
+  --syn-type: #025559;
+
+  color-scheme: light;
+}
+
+:root[data-theme="sereno-dark"] {
+  --bg: #171a1d;
+  --sidebar-bg: #1c2024;
+  --surface: #1d2125;
+  --surface-strong: #2c3136;
+  --border: #2c3136;
+  --border-strong: #31363c;
+  --text: #dad7cf;
+  --text-soft: #bab7af;
+  --muted: #81878d;
+  --link: #9fcbfe;
+  --accent: #9fcbfe;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  --selection: #27364a;
+  --backdrop: rgba(23, 26, 29, 0.62);
+
+  --note: #73b0ee;
+  --tip: #acd9a2;
+  --important: #e2b5ec;
+  --warning: #e6b55d;
+  --caution: #ed756e;
+
+  --site-nav-bg: rgba(23, 26, 29, 0.82);
+  --site-glow: rgba(159, 203, 254, 0.13);
+  --site-frame: 0 24px 70px -28px rgba(0, 0, 0, 0.8);
+  --site-on-accent: #171a1d;
+
+  --syn-key: #e2b5ec;
+  --syn-str: #acd9a2;
+  --syn-com: #bdaf99;
+  --syn-fn: #9fcbfe;
+  --syn-num: #f5bd94;
+  --syn-type: #93d9d9;
+
+  color-scheme: dark;
+}
+
 /* ------------------------------------------------------------------- base */
 
 * { box-sizing: border-box; }
