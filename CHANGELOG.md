@@ -25,7 +25,7 @@ Before 1.0.0 there were no numbers: a single release, `latest`, was rebuilt from
 `main` on every push, and the entries from then are headed by the date the work
 landed.
 
-## Unreleased
+## 1.3.0 — 2026-11-25
 
 The Markdown behind the page, for when it is the Markdown you want to copy.
 <kbd>Ctrl</kbd> <kbd>U</kbd>, or the new button in the bar, swaps the page for
