@@ -25,6 +25,33 @@ Before 1.0.0 there were no numbers: a single release, `latest`, was rebuilt from
 `main` on every push, and the entries from then are headed by the date the work
 landed.
 
+## Unreleased
+
+The Markdown behind the page, for when it is the Markdown you want to copy.
+<kbd>Ctrl</kbd> <kbd>U</kbd>, or the new button in the bar, swaps the page for
+the file as it was written: read-only, with line numbers, soft-wrapped, and
+scrolled to the line you were reading -- and back again, to the same place. A
+selection copied from it is the Markdown exactly, blank lines included, and
+never the numbers. <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>C</kbd>, or the copy
+button beside print, copies the whole file from either view. The choice lasts
+while the window is open, across the documents it moves between, and is not
+remembered between runs; <kbd>Esc</kbd> leaves it before it closes anything.
+Printing always prints the page. To find the reader's place, every block of the
+rendered page now carries the lines it came from.
+
+The folder a document lives in, a click away. The new button beside reload,
+or <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>O</kbd>, opens the file manager on
+that folder with the file already selected -- for a document that has been open
+long enough that nobody remembers where it came from. On Linux this asks the
+file manager over the desktop's standard interface and, where none answers,
+opens the folder alone; on Windows it is Explorer. Beside it, another button,
+or <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>P</kbd>, copies the file's full path,
+absolute however the file was opened.
+
+The table of contents button no longer looks like it does nothing. In a
+document with no headings it is faded like any other button with nowhere to go,
+and its tooltip says why: there is nothing to list.
+
 ## 1.2.0 — 2026-11-24
 
 A sixth theme, Blacksite: near-black with green phosphor, the palette of the

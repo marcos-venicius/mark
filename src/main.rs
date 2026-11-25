@@ -64,8 +64,12 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("Alt Left/Right", "Go back and forward between documents"),
     ("Home or End", "Top, bottom"),
     ("Ctrl O", "Open a file"),
+    ("Ctrl Shift O", "Show the file in its folder"),
     ("Ctrl P", "Print, or save as PDF"),
+    ("Ctrl Shift P", "Copy the file's full path"),
     ("Ctrl R", "Reload from disk"),
+    ("Ctrl U", "Show the Markdown source, or the page again"),
+    ("Ctrl Shift C", "Copy the whole Markdown source"),
     ("? or F1", "Show this help"),
     ("Esc", "Dismiss, or close the document"),
     ("Ctrl Q", "Quit"),
@@ -118,6 +122,8 @@ enum UserEvent {
     Reopen,
     /// Ask the desktop for a file to open.
     Pick,
+    /// Show the document on screen in the desktop's file manager.
+    ShowFolder,
     /// A file is over the window, or has stopped being. The page draws the
     /// highlight; only Rust is told about the drag at all.
     Dragging(bool),
@@ -239,6 +245,7 @@ fn run() -> Result<()> {
             Event::UserEvent(UserEvent::Close) => app.close(&proxy),
             Event::UserEvent(UserEvent::Reopen) => app.reopen(&proxy),
             Event::UserEvent(UserEvent::Pick) => app.pick(&proxy),
+            Event::UserEvent(UserEvent::ShowFolder) => app.show_folder(),
             Event::UserEvent(UserEvent::Dragging(over)) => app.dragging(over),
             Event::UserEvent(UserEvent::Dropped(path)) => {
                 app.open_path(path, Placement::Top, &proxy)
@@ -544,14 +551,18 @@ impl App {
     /// bar and the document have to change together -- see the comment on
     /// `state` below -- and closing a document changes both.
     fn show(&self, placement: Placement) {
-        let (body, state) = match self.current() {
+        // The file as it is on disk, for the source view and the button that
+        // copies it. It rides in the same call as the page it was rendered into,
+        // so a save can never leave the two showing different versions. None
+        // where there is no file to show, or the file could not be read.
+        let (body, state, source) = match self.current() {
             // The bar's half of the same call. It rides along with the document
             // rather than going down a channel of its own: both change together
             // every time, and one message cannot arrive before the other.
             Some(path) => {
-                let body = match std::fs::read_to_string(path) {
-                    Ok(text) => self.renderer.render(&text),
-                    Err(error) => error_page(path, &error),
+                let (body, source) = match std::fs::read_to_string(path) {
+                    Ok(text) => (self.renderer.render(&text), Some(text)),
+                    Err(error) => (error_page(path, &error), None),
                 };
                 let state = serde_json::json!({
                     "name": file_name(path),
@@ -561,7 +572,7 @@ impl App {
                     "empty": false,
                     "reopen": serde_json::Value::Null,
                 });
-                (body, state)
+                (body, state, source)
             }
             // Nothing on screen, and nothing in the bar that acts on a document.
             // Only Rust knows which file was just closed, so the label of the
@@ -580,7 +591,7 @@ impl App {
                         })
                     }),
                 });
-                (String::new(), state)
+                (String::new(), state, None)
             }
         };
 
@@ -590,11 +601,12 @@ impl App {
             Placement::Keep | Placement::Top => serde_json::Value::Null,
         };
         let script = format!(
-            "window.__mark.setContent({}, {}, {}, {})",
+            "window.__mark.setContent({}, {}, {}, {}, {})",
             serde_json::Value::from(body),
             serde_json::Value::from(keep_scroll),
             state,
             fragment,
+            serde_json::Value::from(source),
         );
         self.script(&script);
     }
@@ -758,6 +770,14 @@ impl App {
     fn pick(&mut self, proxy: &EventLoopProxy<UserEvent>) {
         if let Some(path) = pick_file(&self.window) {
             self.open_path(path, Placement::Top, proxy);
+        }
+    }
+
+    /// Open the folder the document on screen lives in. Nothing with no
+    /// document: the button is disabled then, and the key does nothing either.
+    fn show_folder(&self) {
+        if let Some(path) = self.current() {
+            show_in_folder(path);
         }
     }
 
@@ -1158,6 +1178,94 @@ fn pick_file(_window: &Window) -> Option<PathBuf> {
     None
 }
 
+/// Show a file in the desktop's file manager, selected, in the folder it lives in.
+///
+/// Selected, and not merely the folder opened: in a directory of forty notes
+/// the reader is after this one, and a file manager opened on the folder alone
+/// leaves them to find it again by name. On a freedesktop desktop that is
+/// `org.freedesktop.FileManager1.ShowItems`, which most file managers answer,
+/// Nautilus and Dolphin among them, over the D-Bus connection `gio` -- part of the GTK
+/// that `tao` already builds -- has open anyway.
+///
+/// The call is asynchronous, so a file manager slow to start cannot hold up
+/// the window. Where nothing answers, the folder is opened the plain way,
+/// through whatever owns directories, with no file picked out. Errors past
+/// that are dropped: a button that could not open a file manager has nothing
+/// better to tell the reader than the absence of one.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+fn show_in_folder(path: &Path) {
+    use gtk::gio;
+    use gtk::glib::ToVariant;
+    use gtk::prelude::FileExt;
+
+    let folder = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let fallback = move || {
+        let _ = open::that_detached(&folder);
+    };
+
+    let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE) else {
+        return fallback();
+    };
+    // A URI, not a path: the interface takes URIs, and gio percent-encodes
+    // what a file name can hold that a URI cannot.
+    let uri = gio::File::for_path(path).uri().to_string();
+    let arguments = (vec![uri], String::new()).to_variant();
+    bus.call(
+        Some("org.freedesktop.FileManager1"),
+        "/org/freedesktop/FileManager1",
+        "org.freedesktop.FileManager1",
+        "ShowItems",
+        Some(&arguments),
+        None,
+        gio::DBusCallFlags::NONE,
+        5000,
+        gio::Cancellable::NONE,
+        move |answer| {
+            if answer.is_err() {
+                fallback();
+            }
+        },
+    );
+}
+
+/// The same, the way Windows does it: Explorer with `/select,`.
+///
+/// `raw_arg`, because Explorer parses its own command line rather than
+/// following the C runtime's rules, and Rust's quoting is written for those
+/// rules: an argument with a space in it is quoted whole. The form Explorer
+/// documents has the quotes around the path alone, so that is what is written,
+/// by hand -- and a Windows path cannot hold a quote of its own to break out of
+/// them. Explorer's exit code means nothing, so it is not waited for.
+#[cfg(windows)]
+fn show_in_folder(path: &Path) {
+    use std::os::windows::process::CommandExt;
+
+    let _ = std::process::Command::new("explorer.exe")
+        .raw_arg(format!("/select,\"{}\"", path.display()))
+        .spawn();
+}
+
+/// Elsewhere, the folder alone, through whatever opens folders.
+#[cfg(not(any(
+    windows,
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+)))]
+fn show_in_folder(path: &Path) {
+    if let Some(folder) = path.parent() {
+        let _ = open::that_detached(folder);
+    }
+}
+
 fn decode_message(body: &str) -> Option<UserEvent> {
     let message: serde_json::Value = serde_json::from_str(body).ok()?;
     match message.get("type")?.as_str()? {
@@ -1174,6 +1282,7 @@ fn decode_message(body: &str) -> Option<UserEvent> {
         "close" => Some(UserEvent::Close),
         "reopen" => Some(UserEvent::Reopen),
         "pick" => Some(UserEvent::Pick),
+        "folder" => Some(UserEvent::ShowFolder),
         "quit" => Some(UserEvent::Quit),
         "back" => Some(UserEvent::Back),
         "forward" => Some(UserEvent::Forward),
@@ -1633,6 +1742,16 @@ mod tests {
         assert!(
             print.contains("#theme-menu,"),
             "the theme menu prints along with the page"
+        );
+        // The source view is for the screen. Paper gets the page whichever of
+        // the two was showing, and the page is hidden while the source is.
+        assert!(
+            print.contains("#source,"),
+            "the source view prints along with the page"
+        );
+        assert!(
+            print.contains("#content[hidden] { display: block; }"),
+            "a document printed from the source view prints a blank page"
         );
         // Without this the document below the bar is a lone flex item, and a
         // flex item does not break across pages: the printout stops at page one.

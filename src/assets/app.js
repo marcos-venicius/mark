@@ -5,6 +5,7 @@
 
   var page = document.getElementById("page");
   var content = document.getElementById("content");
+  var source = document.getElementById("source");
   var toc = document.getElementById("toc");
   var tocList = document.getElementById("toc-list");
   var find = document.getElementById("find");
@@ -19,10 +20,17 @@
   var barBack = document.getElementById("bar-back");
   var barForward = document.getElementById("bar-forward");
   var barToc = document.getElementById("bar-toc");
+  // What the button says when it has something to show, as shell.html wrote it,
+  // so the key in it is written down in one place.
+  var TOC_TITLE = barToc.title;
   var barFind = document.getElementById("bar-find");
   var barWide = document.getElementById("bar-wide");
   var barReload = document.getElementById("bar-reload");
+  var barFolder = document.getElementById("bar-folder");
+  var barPath = document.getElementById("bar-path");
   var barPrint = document.getElementById("bar-print");
+  var barSource = document.getElementById("bar-source");
+  var barCopy = document.getElementById("bar-copy");
   var empty = document.getElementById("empty");
   var emptyReopen = document.getElementById("empty-reopen");
   var viewer = document.getElementById("viewer");
@@ -67,6 +75,19 @@
   // finishes afterwards must not write into a DOM that has already been thrown
   // away.
   var generation = 0;
+
+  // The file as Rust read it for the page on screen, and null when there is no
+  // file or it could not be read: there is no source to show behind an error.
+  // sourceShown is the reader's Ctrl U, which outlives the document it was
+  // pressed on, so that walking a set of linked files keeps showing them the
+  // same way. It is not kept between runs, unlike the measure: a document that
+  // opens on its own source looks like one that failed to render.
+  var sourceText = null;
+  var sourceLines = [];
+  var sourceShown = false;
+  // The rows are built when they are first wanted rather than with every
+  // document: most documents are never looked at this way.
+  var sourceBuilt = -1;
 
   // What the page keeps between runs, all of it in localStorage: the webview
   // keeps that store on disk by itself, and mark writes no file of its own.
@@ -221,12 +242,13 @@
   // the two to get right. The fragment is the heading a link named along with
   // the file -- `section` in other.md#section -- or null.
   window.__mark = {
-    setContent: function (html, keepScroll, state, fragment) {
+    setContent: function (html, keepScroll, state, fragment, text) {
       // A diagram open in the viewer belongs to the document about to be
       // replaced. It goes back first, while there is still a place for it.
       closeViewer();
       var offset = keepScroll ? page.scrollTop : 0;
       var mine = (generation += 1);
+      setSource(text);
       applyState(state);
       content.innerHTML = html;
       labelCodeBlocks();
@@ -1060,7 +1082,7 @@
 
       var chosen = headings[0].id;
       headings.forEach(function (heading) {
-        if (heading.getBoundingClientRect().top < line) chosen = heading.id;
+        if (headingTop(heading) < line) chosen = heading.id;
       });
       markActive(chosen);
     };
@@ -1111,6 +1133,318 @@
     updateSpy();
   }
 
+  // ----------------------------------------------------------------- source
+
+  // What Rust sent along with the page. Split once, here, because the rows,
+  // the copy handler and the place-keeping all count in lines. A file that ends
+  // in a newline -- nearly every one -- has no line after it, whatever split
+  // says; the copy button still copies the text exactly as it is on disk.
+  function setSource(text) {
+    sourceText = typeof text === "string" ? text : null;
+    sourceLines = sourceText === null ? [] : sourceText.split(/\r\n|\n|\r/);
+    if (sourceLines.length > 1 && sourceLines[sourceLines.length - 1] === "") sourceLines.pop();
+  }
+
+  // Which of the two is on screen, and what the bar offers. The page stays in
+  // the DOM, hidden, while the source is shown: the sidebar is still built from
+  // its headings and Ctrl U has to come back to it without asking Rust.
+  function syncSource() {
+    var available = sourceText !== null && empty.hidden;
+    var on = available && sourceShown;
+    if (on && sourceBuilt !== generation) buildSource();
+    source.hidden = !on;
+    content.hidden = !empty.hidden || on;
+    barSource.disabled = !available;
+    barCopy.disabled = !available;
+    syncBar();
+  }
+
+  function buildSource() {
+    var rows = document.createDocumentFragment();
+    sourceLines.forEach(function (text) {
+      var row = document.createElement("div");
+      row.className = "line";
+      // Text, never markup: this is the document's own HTML as written, and it
+      // is shown, not run.
+      if (text) row.textContent = text;
+      rows.appendChild(row);
+    });
+    source.textContent = "";
+    source.appendChild(rows);
+    // The gutter is as wide as the largest number in it and no wider.
+    source.style.setProperty("--digits", String(String(sourceLines.length).length));
+    sourceBuilt = generation;
+  }
+
+  function toggleSource() {
+    if (sourceText === null || !empty.hidden) return;
+    // Where the reader is, as a line of the file, measured on whichever of the
+    // two is still on screen -- and then found again on the other.
+    var place = source.hidden ? pagePlace() : sourcePlace();
+    sourceShown = source.hidden;
+    syncSource();
+    goToPlace(place);
+    // Every heading has just moved, or stopped being drawn at all.
+    updateSpy();
+  }
+
+  // The lines one block came from, out of the data-sourcepos render.rs asks
+  // comrak for: "12:1-15:40" is lines 12 to 15. Null for a block without one.
+  function sourceRange(element) {
+    var at = element.getAttribute("data-sourcepos");
+    if (!at) return null;
+    var dash = at.indexOf("-");
+    var start = parseInt(at, 10);
+    var end = parseInt(at.slice(dash + 1), 10);
+    if (isNaN(start) || isNaN(end)) return null;
+    return { start: start, end: end };
+  }
+
+  // The row a heading or any other element of the page was written on.
+  function rowFor(element) {
+    var holder = element.closest("[data-sourcepos]");
+    var range = holder && sourceRange(holder);
+    return range ? source.children[range.start - 1] || null : null;
+  }
+
+  // Where the sidebar measures a heading: on the page, or at its line.
+  function headingTop(heading) {
+    if (source.hidden) return heading.getBoundingClientRect().top;
+    var row = rowFor(heading);
+    return row ? row.getBoundingClientRect().top : Infinity;
+  }
+
+  // Every block of the page that can say which lines it came from, in the
+  // order they are drawn. Only measurable while the page is on screen.
+  //
+  // Not every block carries a position. The highlighter writes its own <pre>
+  // and drops it, raw HTML is passed through as written, and diagrams replace
+  // the fence they came from -- which together are much of a technical
+  // document. A block like that has what lies between its neighbours, blank
+  // lines trimmed off the ends, and a run of several shares it out by height:
+  // a long block is a long stretch of the file far more often than not.
+  function pageBlocks() {
+    var tops = [];
+    var i;
+    for (i = 0; i < content.children.length; i += 1) {
+      var child = content.children[i];
+      tops.push({ el: child, range: sourceRange(child) || rangeWithin(child) });
+    }
+
+    i = 0;
+    while (i < tops.length) {
+      if (tops[i].range) {
+        i += 1;
+        continue;
+      }
+      var first = i;
+      while (i < tops.length && !tops[i].range) i += 1;
+      var from = first > 0 ? tops[first - 1].range.end + 1 : 1;
+      var to = i < tops.length ? tops[i].range.start - 1 : sourceLines.length;
+      while (from < to && !sourceLines[from - 1].trim()) from += 1;
+      while (to > from && !sourceLines[to - 1].trim()) to -= 1;
+      shareOut(tops.slice(first, i), from, Math.max(from, to));
+    }
+
+    var blocks = [];
+    tops.forEach(function (top) {
+      blocks.push({ el: top.el, range: top.range });
+      top.el.querySelectorAll("[data-sourcepos]").forEach(function (inner) {
+        blocks.push({ el: inner, range: sourceRange(inner) });
+      });
+    });
+    // Something drawn nowhere -- inside a closed <details>, say -- has no
+    // place on screen to measure.
+    return blocks.filter(function (block) {
+      return block.el.getClientRects().length > 0;
+    });
+  }
+
+  // A wrapper app.js put around a block -- the scroller around a table -- has
+  // no position of its own, and the lines of what is inside it are its lines.
+  function rangeWithin(element) {
+    var range = null;
+    element.querySelectorAll("[data-sourcepos]").forEach(function (inner) {
+      var own = sourceRange(inner);
+      if (!own) return;
+      if (!range) range = { start: own.start, end: own.end };
+      range.start = Math.min(range.start, own.start);
+      range.end = Math.max(range.end, own.end);
+    });
+    return range;
+  }
+
+  function shareOut(run, from, to) {
+    var total = 0;
+    run.forEach(function (top) {
+      total += Math.max(top.el.offsetHeight, 1);
+    });
+    var span = to - from + 1;
+    var at = from;
+    run.forEach(function (top) {
+      var lines = Math.max(1, Math.round((span * Math.max(top.el.offsetHeight, 1)) / total));
+      var end = Math.min(to, at + lines - 1);
+      top.range = { start: at, end: end };
+      at = Math.min(to, end + 1);
+    });
+  }
+
+  // The line at the top of the view, with the fraction of it already scrolled
+  // past: 12.4 is four tenths of the way through line 12. On the page, a block
+  // is taken to spread its lines evenly over its height, which is wrong for a
+  // table and close enough for everything else.
+  function pagePlace() {
+    if (page.scrollTop <= 2) return 1;
+    var top = page.getBoundingClientRect().top;
+    var chosen = null;
+    var box = null;
+    // The last block to start above the top of the view is the one the reader
+    // is in: a list item rather than its list, the paragraph rather than the
+    // quote around it.
+    pageBlocks().forEach(function (block) {
+      var rect = block.el.getBoundingClientRect();
+      if (rect.top <= top + 1) {
+        chosen = block;
+        box = rect;
+      }
+    });
+    if (!chosen) return 1;
+    var fraction = box.height > 0 ? clamp((top - box.top) / box.height, 0, 1) : 0;
+    return chosen.range.start + fraction * (chosen.range.end - chosen.range.start + 1);
+  }
+
+  function sourcePlace() {
+    var rows = source.children;
+    if (page.scrollTop <= 2 || rows.length === 0) return 1;
+    var top = page.getBoundingClientRect().top;
+    // The rows are in order down the page, so the first one still showing is
+    // found by halving rather than by measuring all ten thousand of them.
+    var low = 0;
+    var high = rows.length - 1;
+    while (low < high) {
+      var middle = (low + high) >> 1;
+      if (rows[middle].getBoundingClientRect().bottom > top) high = middle;
+      else low = middle + 1;
+    }
+    var box = rows[low].getBoundingClientRect();
+    var fraction = box.height > 0 ? clamp((top - box.top) / box.height, 0, 1) : 0;
+    return low + 1 + fraction;
+  }
+
+  function goToPlace(place) {
+    if (place <= 1) return scrollInstantly(0);
+    var top = page.getBoundingClientRect().top;
+    var whole = Math.floor(place);
+    var y;
+
+    if (!source.hidden) {
+      var row = source.children[clamp(whole - 1, 0, source.children.length - 1)];
+      if (!row) return scrollInstantly(0);
+      var box = row.getBoundingClientRect();
+      y = box.top + (place - whole) * box.height;
+    } else {
+      var chosen = null;
+      pageBlocks().forEach(function (block) {
+        if (block.range.start <= whole) chosen = block;
+      });
+      if (!chosen) return scrollInstantly(0);
+      var rect = chosen.el.getBoundingClientRect();
+      var span = chosen.range.end - chosen.range.start + 1;
+      y = rect.top + clamp((place - chosen.range.start) / span, 0, 1) * rect.height;
+    }
+    scrollInstantly(page.scrollTop + y - top);
+  }
+
+  // The page scrolls smoothly, which is right for a key that moves the reader
+  // and wrong for one that swaps what they are reading: the view would glide
+  // in from the top of the file to the place it was already meant to be.
+  function scrollInstantly(y) {
+    page.style.scrollBehavior = "auto";
+    page.scrollTop = y;
+    page.style.scrollBehavior = "";
+  }
+
+  function clamp(value, low, high) {
+    return Math.max(low, Math.min(high, value));
+  }
+
+  // What a copy out of the source puts on the clipboard, worked out from the
+  // lines rather than from the selection's own text. The rows are blocks, and
+  // what the webview makes of a selection across blocks is its own business:
+  // WebKit folds an empty one away to nothing, and a blank line of the file
+  // would go missing from every paste. Anything selected outside the source --
+  // the sidebar, under Ctrl A -- is left out, since it was never in the file.
+  document.addEventListener("copy", function (event) {
+    if (source.hidden || document.activeElement === findInput) return;
+    var selection = window.getSelection();
+    if (selection.rangeCount === 0 || selection.isCollapsed) return;
+    var range = selection.getRangeAt(0);
+    if (!range.intersectsNode(source)) return;
+
+    var from = sourcePoint(range.startContainer, range.startOffset);
+    var to = sourcePoint(range.endContainer, range.endOffset);
+    var text;
+    if (from.line === to.line) {
+      text = sourceLines[from.line].slice(from.at, to.at);
+    } else {
+      text = [sourceLines[from.line].slice(from.at)]
+        .concat(sourceLines.slice(from.line + 1, to.line))
+        .concat([sourceLines[to.line].slice(0, to.at)])
+        .join("\n");
+    }
+    event.clipboardData.setData("text/plain", text);
+    event.preventDefault();
+  });
+
+  // One end of a selection as a line of the file and a character in it. An
+  // end can sit in a row's text, on a row, on the source itself between two
+  // rows, or outside it altogether, which clamps it to the first or last line.
+  function sourcePoint(node, offset) {
+    var last = sourceLines.length - 1;
+    var start = { line: 0, at: 0 };
+    var end = { line: last, at: sourceLines[last].length };
+    var whole = document.createRange();
+    whole.selectNodeContents(source);
+    var where = whole.comparePoint(node, offset);
+    if (where < 0) return start;
+    if (where > 0) return end;
+
+    if (node === source) {
+      return offset >= source.children.length ? end : { line: offset, at: 0 };
+    }
+    var row = node.nodeType === Node.ELEMENT_NODE ? node.closest(".line") : node.parentNode.closest(".line");
+    if (!row) return start;
+    var line = Array.prototype.indexOf.call(source.children, row);
+    if (node === row) {
+      return { line: line, at: offset === 0 ? 0 : sourceLines[line].length };
+    }
+    return { line: line, at: Math.min(offset, sourceLines[line].length) };
+  }
+
+  // The whole file, exactly as it is on disk, with whichever of the two on
+  // screen. The button answers with a check, or in the caution colour if the
+  // clipboard refused: it has no words to change the way the code blocks' do.
+  function copySource() {
+    if (sourceText === null || !empty.hidden) return;
+    writeClipboard(sourceText).then(
+      function () {
+        flash(barCopy, "said");
+      },
+      function () {
+        flash(barCopy, "refused");
+      }
+    );
+  }
+
+  function flash(button, state) {
+    button.classList.remove("said", "refused");
+    button.classList.add(state);
+    clearTimeout(button.flashTimer);
+    button.flashTimer = setTimeout(function () {
+      button.classList.remove(state);
+    }, 1400);
+  }
+
   // ------------------------------------------------------------------ links
 
   document.addEventListener("click", function (event) {
@@ -1142,7 +1476,14 @@
       }
     }
     if (!target) return false;
-    target.scrollIntoView({ behavior: behavior || "smooth", block: "start" });
+    // With the source on screen the page is not drawn, and scrolling to the
+    // heading would scroll nothing: its line is what the reader is after.
+    if (!source.hidden) {
+      var row = rowFor(target);
+      if (row) row.scrollIntoView({ behavior: behavior || "smooth", block: "start" });
+    } else {
+      target.scrollIntoView({ behavior: behavior || "smooth", block: "start" });
+    }
     // A document that fits the window does not scroll at all, so nothing else
     // would ever tell the sidebar which entry the reader picked. Where the page
     // does scroll, the spy settles the highlight a moment later anyway.
@@ -1261,8 +1602,9 @@
   // about it survives to be honoured again when the document comes back.
   function showEmpty(on, reopen) {
     empty.hidden = !on;
-    content.hidden = on;
     barReload.disabled = on;
+    barFolder.disabled = on;
+    barPath.disabled = on;
     barToc.disabled = on;
     barFind.disabled = on;
     barWide.disabled = on;
@@ -1276,14 +1618,30 @@
       emptyReopen.textContent = "Reopen " + reopen.name;
       emptyReopen.title = reopen.path;
     }
+
+    // Which of the page and its source is drawn depends on there being a
+    // document at all, so it is settled here, after the empty state is.
+    syncSource();
   }
 
-  // The three things in the bar that turn something on and leave it on.
+  // The four things in the bar that turn something on and leave it on.
   // Everything else there happens once and has no state to show.
   function syncBar() {
     barToc.setAttribute("aria-pressed", String(!toc.hidden));
     barFind.setAttribute("aria-pressed", String(!find.hidden));
     barWide.setAttribute("aria-pressed", String(document.documentElement.hasAttribute("data-wide")));
+    barSource.setAttribute("aria-pressed", String(!source.hidden));
+
+    // A document with no headings has no contents to list, and a button that
+    // looks like every other one and does nothing reads as broken. It is
+    // marked unavailable rather than disabled: a disabled button takes no
+    // pointer events, so its tooltip -- the one place to say why -- would
+    // never show. With no document at all it is disabled outright, like the
+    // rest of the bar, and there is nothing to explain.
+    var nothingToList = empty.hidden && tocList.childElementCount === 0;
+    if (nothingToList) barToc.setAttribute("aria-disabled", "true");
+    else barToc.removeAttribute("aria-disabled");
+    barToc.title = nothingToList ? "No table of contents: this document has no headings" : TOC_TITLE;
   }
 
   // A click leaves the focus on the button, where the next Enter or space would
@@ -1314,6 +1672,8 @@
   press("bar-forward", function () {
     send({ type: "forward" });
   });
+  press("bar-folder", showFolder);
+  press("bar-path", copyPath);
   press("bar-reload", function () {
     send({ type: "reload" });
   });
@@ -1322,11 +1682,36 @@
   });
   press("bar-toc", toggleToc);
   press("bar-wide", toggleWide);
+  press("bar-source", toggleSource);
+  press("bar-copy", copySource);
   press("bar-theme", toggleThemeMenu);
   press("bar-find", function () {
     if (find.hidden) openFind();
     else closeFind();
   });
+
+  // The folder the document lives in, opened by Rust in the file manager.
+  // With no document there is no folder to name, and the key, like the
+  // button, does nothing.
+  function showFolder() {
+    if (empty.hidden) send({ type: "folder" });
+  }
+
+  // The whole path of the document on screen, as Rust sent it with the bar's
+  // state -- already absolute, however the file was opened. It is the
+  // tooltip on the name in the middle of the bar too, which is where it is
+  // read back from rather than kept twice.
+  function copyPath() {
+    if (!empty.hidden || !barName.title) return;
+    writeClipboard(barName.title).then(
+      function () {
+        flash(barPath, "said");
+      },
+      function () {
+        flash(barPath, "refused");
+      }
+    );
+  }
 
   // ------------------------------------------------------------------- zoom
 
@@ -1350,6 +1735,9 @@
       else if (!themeMenu.hidden) closeThemeMenu();
       else if (viewing) closeViewer();
       else if (!find.hidden) closeFind();
+      // The source is a way of looking at the document, and leaving it is the
+      // dismissal a reader means before they mean closing the file.
+      else if (!source.hidden) toggleSource();
       // The last rung is the document itself, not the window. Esc arrives here
       // by being pressed once too often as much as on purpose, and the empty
       // state offers the document straight back; quitting would not. Once there
@@ -1402,12 +1790,28 @@
         case "o":
           event.preventDefault();
           return send({ type: "pick" });
+        // Shift makes it a capital: Ctrl O brings a file in, Ctrl Shift O goes
+        // out to where it lives.
+        case "O":
+          event.preventDefault();
+          return showFolder();
+        case "P":
+          event.preventDefault();
+          return copyPath();
         case "p":
           event.preventDefault();
           return send({ type: "print" });
         case "r":
           event.preventDefault();
           return send({ type: "reload" });
+        case "u":
+          event.preventDefault();
+          return toggleSource();
+        // Shift turns the key into a capital, and Ctrl C without it is left to
+        // copy whatever is selected, in the page or in the source.
+        case "C":
+          event.preventDefault();
+          return copySource();
         case "q":
           event.preventDefault();
           return send({ type: "quit" });

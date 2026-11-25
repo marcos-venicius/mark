@@ -119,6 +119,12 @@ impl Renderer {
         // blast radius with a CSP plus the path jail in protocol.rs.
         render.r#unsafe = true;
         render.tasklist_classes = true;
+        // Every block says which lines of the file it came from, as
+        // data-sourcepos="12:1-15:40". It is what lets Ctrl U swap the page for
+        // its source without losing the reader's place: the block at the top of
+        // the view names the line to scroll the source to, and back again. It
+        // is also how the sidebar finds a heading while the source is on screen.
+        render.sourcepos = true;
         // Leave github_pre_lang off: it moves the info string onto <pre>, which
         // the highlighter drops in CSS-class mode. On <code> it survives, and
         // app.js turns it into the little language label on the block.
@@ -575,6 +581,17 @@ mod tests {
         rest[..rest.find('"').expect("attribute is closed")].to_string()
     }
 
+    /// Some rendered HTML with every `data-sourcepos` taken out, for the tests
+    /// that are about something else: the lines and columns are noise there.
+    fn without_sourcepos(html: &str) -> String {
+        let mut parts = html.split(" data-sourcepos=\"");
+        let mut out = parts.next().unwrap_or_default().to_string();
+        for part in parts {
+            out.push_str(&part[part.find('"').map_or(0, |at| at + 1)..]);
+        }
+        out
+    }
+
     fn renderer() -> Renderer {
         Renderer::new(Arc::new(Mutex::new(PathBuf::from("/docs"))))
     }
@@ -594,7 +611,7 @@ mod tests {
     #[test]
     fn gfm_tables_render() {
         let html = renderer().render("| a | b |\n| --- | --- |\n| 1 | 2 |\n");
-        assert!(html.contains("<table>") && html.contains("<th>"), "{html}");
+        assert!(html.contains("<table ") && html.contains("<th "), "{html}");
     }
 
     /// What app.js has to find to draw a diagram: the fence's language on the
@@ -615,7 +632,7 @@ mod tests {
     /// why the page reads it back with `textContent`.
     #[test]
     fn maths_is_marked_up_for_the_page() {
-        let html = renderer().render("Let $x^2$ be, and $$e = mc^2$$ as well.\n");
+        let html = without_sourcepos(&renderer().render("Let $x^2$ be, and $$e = mc^2$$ as well.\n"));
         assert!(
             html.contains(r#"<span data-math-style="inline">x^2</span>"#),
             "{html}"
@@ -625,7 +642,7 @@ mod tests {
             "{html}"
         );
 
-        let coded = renderer().render("Inline $`a < b`$ code.\n");
+        let coded = without_sourcepos(&renderer().render("Inline $`a < b`$ code.\n"));
         assert!(
             coded.contains(r#"<code data-math-style="inline">a &lt; b</code>"#),
             "{coded}"
@@ -657,6 +674,17 @@ mod tests {
             let html = renderer().render(prose);
             assert!(!html.contains("data-math-style"), "{html}");
         }
+    }
+
+    /// The source view finds its place by these numbers, so they have to be
+    /// lines of the file as it is on disk. Front matter is cut off before the
+    /// rest is parsed, and a count that started after it would put every
+    /// heading in the source a few lines too high.
+    #[test]
+    fn blocks_name_their_lines_in_the_file_front_matter_included() {
+        let html = renderer().render("---\ntitle: x\n---\n\n# Hi\n\ntext\n");
+        assert!(html.contains(r#"<h1 id="hi" data-sourcepos="5:1-5:4">"#), "{html}");
+        assert!(html.contains(r#"<p data-sourcepos="7:1-7:4">"#), "{html}");
     }
 
     #[test]

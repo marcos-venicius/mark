@@ -45,6 +45,17 @@
       <button id="bar-reload" type="button" title="Reload from disk (Ctrl R)" aria-label="Reload">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3.5V9h-5.5"/></svg>
       </button>
+      <!-- A folder like the open button's, with an arrow leaving it: this one
+           goes out to the file manager rather than bringing a file in. -->
+      <button id="bar-folder" type="button" title="Show in folder (Ctrl Shift O)" aria-label="Show the file in its folder">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V9a2 2 0 0 0-2-2h-8L9 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7"/><path d="m16 20 5-5"/><path d="M17 15h4v4"/></svg>
+      </button>
+      <!-- A page with a slash on it, for the path. It answers a copy the way the
+           source's copy button does, with a check in place of the icon. -->
+      <button id="bar-path" class="copier" type="button" title="Copy the full path (Ctrl Shift P)" aria-label="Copy the file's full path">
+        <svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m13.5 11-3 7"/></svg>
+        <svg class="icon-done" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+      </button>
 
       <span class="bar-sep"></span>
 
@@ -57,11 +68,21 @@
       <button id="bar-wide" type="button" title="Full window width (Z)" aria-label="Use the full window width" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16"/><path d="M16 12h6"/><path d="m19 9 3 3-3 3"/><path d="M8 12H2"/><path d="m5 9-3 3 3 3"/></svg>
       </button>
+      <button id="bar-source" type="button" title="Markdown source (Ctrl U)" aria-label="Show the Markdown source" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5"/><path d="m16 7 5 5-5 5"/><path d="m14 4-4 16"/></svg>
+      </button>
     </div>
 
     <span id="bar-name"></span>
 
     <div class="bar-group bar-right">
+      <!-- Two icons, and the stylesheet shows one: the check is the button
+           saying the copy worked, which a button with no words in it has no
+           other way to say. -->
+      <button id="bar-copy" class="copier" type="button" title="Copy the Markdown source (Ctrl Shift C)" aria-label="Copy the Markdown source">
+        <svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+        <svg class="icon-done" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+      </button>
       <button id="bar-print" type="button" title="Print, or save as PDF (Ctrl P)" aria-label="Print">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6"/><path d="M7 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7z"/></svg>
       </button>
@@ -86,6 +107,11 @@
 
     <div id="page">
       <main id="content"></main>
+
+      <!-- The file as it was written, one row per line, filled in by app.js
+           while Ctrl U has it on screen. The line numbers are drawn by the
+           stylesheet, so no selection can pick them up. -->
+      <div id="source" aria-label="Markdown source" hidden></div>
 
       <!-- The window with nothing in it: where mark starts when it was given no
            file, and where Esc lands once there is nothing left to dismiss.

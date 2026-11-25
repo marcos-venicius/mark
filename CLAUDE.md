@@ -6,7 +6,7 @@ deliberately left out and what each item would cost. This file does not repeat e
 it tells you where to look and how to work here.
 
 `mark <file>` opens a window and renders that file. One Rust binary, no bundled browser,
-no frontend build step, about 4.6 MB with the stylesheet, the page script, two fonts,
+no frontend build step, about 4.7 MB with the stylesheet, the page script, two fonts,
 the mermaid renderer and KaTeX compiled in. Nothing is written to disk at runtime. Around
 the binary there is desktop integration on both systems: `install.sh` on Linux, and a
 per-user Inno Setup installer that the Windows workflow builds as a second artefact.
@@ -53,7 +53,8 @@ the terminal back, the window comes up hidden with the webview in it, and `app.j
 `{"type":"ready"}` carrying the window size it kept last time. `App::reveal` sizes the
 window and shows it. Only then does `App::show` read the file, `Renderer::render` turn it
 into HTML, and Rust inject it with `window.__mark.setContent(html, keepScroll, state,
-fragment)` -- `fragment` being the heading a link named, or `null`. The page asks rather
+fragment, source)` -- `fragment` being the heading a link named, or `null`, and
+`source` the file's text for the Ctrl U view, or `null` with nothing readable. The page asks rather
 than Rust pushing on a timer, which removes the race with the webview loading. `state` is
 the top bar's half of that same call -- the file name, its path, and whether the history
 has anywhere to go either way -- carried along with the document so that the two cannot
@@ -124,7 +125,7 @@ guards the second.
 
 ```sh
 cargo build --release
-cargo test          # 71 tests: 35 in render.rs, 11 in protocol.rs, 21 in main.rs,
+cargo test          # 72 tests: 36 in render.rs, 11 in protocol.rs, 21 in main.rs,
                     # 3 in base64.rs, 1 in clipboard.rs
 cargo clippy
 cargo run -- examples/README.md

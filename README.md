@@ -8,7 +8,7 @@ that file, and stays out of the way.
 No editor, no preview pane, no browser tab. It reads the file, highlights the
 code, shows the images, and reloads when you save.
 
-The binary is about 4.6 MB and carries everything it needs: the stylesheet, the
+The binary is about 4.7 MB and carries everything it needs: the stylesheet, the
 page script, the two fonts, the diagram renderer and the formula renderer. There
 is no bundled browser, no frontend build step, and nothing written to disk at
 runtime.
@@ -143,6 +143,13 @@ practical way to see it — a document opened from Explorer never passes a promp
 - **Maths.** `$x$` and `$$x$$`, `` $`x`$ `` and a ```` ```math ```` fence, typeset
   by a KaTeX compiled into the binary alongside the diagram renderer. A formula
   that will not parse is written out where it stands.
+- **The source, a key away.** <kbd>Ctrl</kbd> <kbd>U</kbd> swaps the page for
+  the file as it was written, with line numbers, wrapped like an editor's soft
+  wrap, and kept at the place you were reading; the same key brings the page
+  back, and so does <kbd>Esc</kbd>. Select any part of it and copy, and the
+  clipboard gets the Markdown and never the numbers. <kbd>Ctrl</kbd>
+  <kbd>Shift</kbd> <kbd>C</kbd>, or the copy button in the bar, copies the whole
+  file from either view. Printing always prints the page.
 - **Inline HTML**, for the things Markdown has no syntax for.
 - **YAML front matter** is recognised and hidden instead of rendered as prose.
 - **Live reload.** Save the file in your editor and the window updates without
@@ -154,8 +161,8 @@ practical way to see it — a document opened from Explorer never passes a promp
   in the same window, at the heading it names if it names one
   (`other.md#section`), with back and forward history. Links to the web open in
   your default browser; other files open in whatever application owns them.
-- **A bar across the top** — back and forward, reload, the table of contents,
-  find in page, print, the theme menu, and the help panel, with the name of the
+- **A bar across the top** — back and forward, reload, the file's folder and its full path, the table of contents,
+  find in page, the source view, copying the source, print, the theme menu, and the help panel, with the name of the
   open file in the middle. Every button is also a key, and its tooltip says which
   one, so the shortcuts are there to be picked up rather than looked up.
 - **Bundled typography** — Inter for text, JetBrains Mono for code, compiled into
@@ -189,8 +196,12 @@ practical way to see it — a document opened from Explorer never passes a promp
 | <kbd>Alt</kbd> <kbd>←</kbd> / <kbd>→</kbd> | Back, forward |
 | <kbd>Home</kbd> / <kbd>End</kbd> | Top, bottom |
 | <kbd>Ctrl</kbd> <kbd>O</kbd> | Open a file |
+| <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>O</kbd> | Show the file in its folder |
 | <kbd>Ctrl</kbd> <kbd>P</kbd> | Print, or save as PDF |
+| <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>P</kbd> | Copy the file's full path |
 | <kbd>Ctrl</kbd> <kbd>R</kbd> | Reload from disk |
+| <kbd>Ctrl</kbd> <kbd>U</kbd> | Show the Markdown source, or the page again |
+| <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>C</kbd> | Copy the whole Markdown source |
 | <kbd>?</kbd> or <kbd>F1</kbd> | Show the help panel |
 | <kbd>Esc</kbd> | Dismiss, or close the document |
 | <kbd>Ctrl</kbd> <kbd>Q</kbd> | Quit |

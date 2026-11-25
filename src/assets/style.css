@@ -391,7 +391,7 @@ body {
   cursor: pointer;
 }
 
-#bar button:hover:not(:disabled),
+#bar button:hover:not(:disabled):not([aria-disabled="true"]),
 #bar button:focus-visible {
   background: var(--surface-strong);
   color: var(--text);
@@ -404,10 +404,18 @@ body {
 /* Nowhere to go from here. Faded rather than taken away: a button that comes and
    goes shifts the ones beside it, and the reader loses the target they were
    already aiming at. */
-#bar button:disabled {
+#bar button:disabled,
+#bar button[aria-disabled="true"] {
   opacity: 0.35;
   cursor: default;
 }
+
+/* The copy buttons' check, shown for a moment after a copy that worked. */
+#bar .copier .icon-done { display: none; }
+#bar .copier.said .icon-copy { display: none; }
+#bar .copier.said .icon-done { display: block; }
+#bar .copier.said { color: var(--tip); }
+#bar .copier.refused { color: var(--caution); }
 
 #bar svg {
   width: 16px;
@@ -557,6 +565,59 @@ body {
    element, beside the theme, because both are choices about the window and not
    about the document that happens to be in it. */
 :root[data-wide] #content { max-width: none; }
+
+/* ----------------------------------------------------------------- source */
+
+/* The file as it was written, which Ctrl U puts where the page was. One row
+   per line, so that a line wrapped onto two rows keeps one number, beside its
+   first row, the way an editor's soft wrap does; a long paragraph is one line
+   in Markdown, and a sideways scroll would be the wrong way to read it.
+
+   The number is generated content, and generated content is never part of a
+   selection or of what is copied. A column of real text with user-select: none
+   is the obvious alternative, and WebKit has let such text through into the
+   clipboard when a selection crosses it. A little wider than the page, because
+   the numbers take some of the measure. */
+#source {
+  --digits: 2;
+  --gutter: calc((var(--digits) + 2.5) * 1ch);
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 2.6rem 3rem 8rem;
+  counter-reset: line;
+  font-family: var(--mono);
+  font-size: 0.855rem;
+  font-variant-ligatures: none;
+  line-height: 1.6;
+  tab-size: 4;
+}
+
+#source[hidden] { display: none; }
+
+:root[data-wide] #source { max-width: none; }
+
+#source .line {
+  position: relative;
+  padding-left: var(--gutter);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  counter-increment: line;
+}
+
+#source .line::before {
+  content: counter(line);
+  position: absolute;
+  left: 0;
+  width: calc(var(--digits) * 1ch);
+  color: var(--muted);
+  text-align: right;
+  opacity: 0.7;
+}
+
+/* An empty row has no line box of its own and would fold away to nothing,
+   taking a blank line of the file with it. A space drawn by the stylesheet
+   holds it open and, being generated, is never copied. */
+#source .line:empty::after { content: " "; }
 
 /* --------------------------------------------------------- the empty state */
 
@@ -1336,8 +1397,13 @@ tbody tr:nth-child(even) { background: var(--surface); }
   #find,
   #help,
   #empty,
+  #source,
   #viewer,
   a.anchor { display: none !important; }
+
+  /* Paper always gets the page, whichever of the two is on screen: the source
+     is for selecting and copying, and a printout can do neither. */
+  #content[hidden] { display: block; }
 
   #split { display: block; }
 

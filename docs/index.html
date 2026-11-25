@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <title>mark — a Markdown viewer with exactly one job</title>
-<meta name="description" content="mark &lt;file&gt; opens a window, renders that file, and stays out of the way. One 4.6 MB Rust binary: syntax highlighting, mermaid diagrams, KaTeX formulas and live reload, with no bundled browser.">
+<meta name="description" content="mark &lt;file&gt; opens a window, renders that file, and stays out of the way. One 4.7 MB Rust binary: syntax highlighting, mermaid diagrams, KaTeX formulas and live reload, with no bundled browser.">
 <link rel="canonical" href="https://marcos-venicius.github.io/mark/">
 
 <link rel="icon" href="mark.svg" type="image/svg+xml">
@@ -84,7 +84,7 @@
   <div class="wrap">
     <!-- The version is written here by hand, since the page fetches nothing;
          the_landing_page_names_this_version holds it to Cargo.toml. -->
-    <span class="hero-tag"><b>v1.2.0</b> · <b>4.6 MB</b> · one binary · Linux and Windows</span>
+    <span class="hero-tag"><b>v1.2.0</b> · <b>4.7 MB</b> · one binary · Linux and Windows</span>
 
     <h1>A Markdown viewer with exactly one job</h1>
 
@@ -139,18 +139,23 @@
     <div class="window">
       <div class="window-bar">
         <div class="bar-group">
+          <span class="bar-icon" title="Open a file (Ctrl O)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
           <span class="bar-icon off" title="Back (Alt Left)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></span>
           <span class="bar-icon off" title="Forward (Alt Right)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
           <span class="bar-icon" title="Reload from disk (Ctrl R)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3.5V9h-5.5"/></svg></span>
+          <span class="bar-icon" title="Show in folder (Ctrl Shift O)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V9a2 2 0 0 0-2-2h-8L9 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7"/><path d="m16 20 5-5"/><path d="M17 15h4v4"/></svg></span>
+          <span class="bar-icon" title="Copy the full path (Ctrl Shift P)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m13.5 11-3 7"/></svg></span>
           <span class="bar-sep"></span>
           <span class="bar-icon on" title="Table of contents (T)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg></span>
           <span class="bar-icon" title="Find in page (/)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg></span>
           <span class="bar-icon" title="Full window width (Z)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16"/><path d="M16 12h6"/><path d="m19 9 3 3-3 3"/><path d="M8 12H2"/><path d="m5 9-3 3 3 3"/></svg></span>
+          <span class="bar-icon" title="Markdown source (Ctrl U)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5"/><path d="m16 7 5 5-5 5"/><path d="m14 4-4 16"/></svg></span>
         </div>
 
         <span class="bar-name" id="mock-name">README.md</span>
 
         <div class="bar-group bar-right">
+          <span class="bar-icon" title="Copy the Markdown source (Ctrl Shift C)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></span>
           <span class="bar-icon" title="Print, or save as PDF (Ctrl P)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6"/><path d="M7 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v7H7z"/></svg></span>
           <span class="bar-icon" title="Theme (D)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" style="fill:currentColor;stroke:none"/></svg></span>
           <span class="bar-icon" title="Help (?)">?</span>
@@ -179,10 +184,11 @@
             <div class="mock-code">
               <pre data-lang="rust"><code><span class="c">// Relative URLs are made absolute before the markup</span>
 <span class="c">// ever reaches the webview.</span>
-<span class="k">pub fn</span> <span class="f">render</span>(&amp;<span class="k">self</span>, src: &amp;<span class="t">str</span>) -&gt; <span class="t">String</span> {
-    <span class="k">let</span> root = comrak::<span class="f">parse_document</span>(&amp;arena, src, &amp;opts);
-    <span class="k">self</span>.<span class="f">absolutise</span>(root, <span class="n">0</span>);
-    <span class="f">highlight</span>(root, <span class="s">"base16-ocean"</span>)
+<span class="k">pub fn</span> <span class="f">render</span>(&amp;<span class="k">self</span>, markdown: &amp;<span class="t">str</span>) -&gt; <span class="t">String</span> {
+    <span class="k">let</span> <span class="k">mut</span> plugins = <span class="t">Plugins</span>::<span class="f">default</span>();
+    plugins.render.codefence_syntax_highlighter = <span class="t">Some</span>(&amp;<span class="k">self</span>.adapter);
+    <span class="k">let</span> html = <span class="f">markdown_to_html_with_plugins</span>(markdown, &amp;<span class="k">self</span>.options, &amp;plugins);
+    <span class="f">rewrite_raw_html</span>(&amp;html, &amp;<span class="k">self</span>.rewrite)
 }</code></pre>
               <span class="copy">Copy</span>
             </div>
@@ -196,7 +202,7 @@
               <thead><tr><th>Key</th><th>Action</th></tr></thead>
               <tbody>
                 <tr><td>T</td><td>Table of contents</td></tr>
-                <tr><td>D</td><td>Light or dark</td></tr>
+                <tr><td>D</td><td>Cycle the themes</td></tr>
                 <tr><td>Ctrl P</td><td>Print</td></tr>
               </tbody>
             </table>
@@ -235,8 +241,8 @@
             </div>
 
             <p>
-              Each diagram is drawn twice, once per palette, and the stylesheet
-              shows one — which is also what makes a dark page printable.
+              Each diagram is drawn twice, once light and once dark, and the
+              stylesheet shows the one that suits the palette — which is also what makes a dark page printable.
             </p>
           </div>
 
@@ -398,10 +404,12 @@
 
       <article class="card">
         <span class="card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg></span>
-        <h3>Find, print, zoom</h3>
+        <h3>Find, print, zoom, source</h3>
         <p>
           Find in page with next and previous, <kbd>Ctrl</kbd> <kbd>P</kbd> to
-          print or save a PDF, and zoom that sticks to the document.
+          print or save a PDF, and zoom that follows you from one document to the
+          next. <kbd>Ctrl</kbd> <kbd>U</kbd> shows the Markdown behind the page,
+          numbered, to select and copy exactly as it was written.
         </p>
       </article>
     </div>
@@ -554,8 +562,12 @@
       <div class="key-row"><span class="combo"><kbd>Alt</kbd><kbd>←</kbd><span class="sep">/</span><kbd>→</kbd></span><span class="what">Go back and forward between documents</span></div>
       <div class="key-row"><span class="combo"><kbd>Home</kbd><span class="sep">/</span><kbd>End</kbd></span><span class="what">Top, bottom</span></div>
       <div class="key-row"><span class="combo"><kbd>Ctrl</kbd><kbd>O</kbd></span><span class="what">Open a file</span></div>
+      <div class="key-row"><span class="combo"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>O</kbd></span><span class="what">Show the file in its folder</span></div>
       <div class="key-row"><span class="combo"><kbd>Ctrl</kbd><kbd>P</kbd></span><span class="what">Print, or save as PDF</span></div>
+      <div class="key-row"><span class="combo"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd></span><span class="what">Copy the file's full path</span></div>
       <div class="key-row"><span class="combo"><kbd>Ctrl</kbd><kbd>R</kbd></span><span class="what">Reload from disk</span></div>
+      <div class="key-row"><span class="combo"><kbd>Ctrl</kbd><kbd>U</kbd></span><span class="what">Show the Markdown source, or the page again</span></div>
+      <div class="key-row"><span class="combo"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd></span><span class="what">Copy the whole Markdown source</span></div>
       <div class="key-row"><span class="combo"><kbd>?</kbd><span class="sep">or</span><kbd>F1</kbd></span><span class="what">Show this help panel</span></div>
       <div class="key-row"><span class="combo"><kbd>Esc</kbd></span><span class="what">Dismiss, or close the document</span></div>
       <div class="key-row"><span class="combo"><kbd>Ctrl</kbd><kbd>Q</kbd></span><span class="what">Quit</span></div>
@@ -568,7 +580,7 @@
   <div class="wrap">
     <div class="section-head">
       <p class="eyebrow">How it works</p>
-      <h2>One binary, four files</h2>
+      <h2>One binary, six files</h2>
       <p>
         There is no bundled browser and no frontend build step. The stylesheet and
         the page script are compiled into the executable along with everything
@@ -582,7 +594,7 @@
           <h3>It borrows the system's renderer</h3>
           <p>
             WebKitGTK on Linux, WebView2 on Windows — the engine your desktop
-            already ships. That is how 4.6 MB is enough for a viewer that draws
+            already ships. That is how 4.7 MB is enough for a viewer that draws
             diagrams and typesets formulas.
           </p>
         </div>
@@ -621,6 +633,8 @@
   |-- <b>render.rs</b>     <span class="c">Markdown -&gt; HTML</span>
   |-- <b>protocol.rs</b>   <span class="c">the mark:// scheme</span>
   |-- <b>watcher.rs</b>    <span class="c">watch -&gt; live reload</span>
+  |-- <b>clipboard.rs</b>  <span class="c">a copied diagram, held</span>
+  |-- <b>base64.rs</b>     <span class="c">pictures in and out as text</span>
   '-- <b>main.rs</b>       <span class="c">window, webview, history</span>
 </pre>
     </div>
@@ -650,8 +664,8 @@
       <a href="https://katex.org/">KaTeX</a>, both MIT, and two typefaces under the
       SIL Open Font Licence 1.1: <a href="https://github.com/rsms/inter">Inter</a>
       and <a href="https://github.com/JetBrains/JetBrainsMono">JetBrains Mono</a>.
-      This page is static, loads nothing from anywhere else, and keeps only your
-      light-or-dark choice, in your own browser.
+      This page is static, loads nothing from anywhere else, and keeps only the
+      theme you picked, in your own browser.
     </p>
   </div>
 </footer>
